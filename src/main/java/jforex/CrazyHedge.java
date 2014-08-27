@@ -444,7 +444,8 @@ public class CrazyHedge implements IStrategy {
     private void deleteTransactionByOrder(IOrder order) {
         for(Iterator<Transaction> iterator = transactionList.iterator(); iterator.hasNext(); ) {
             Transaction transaction = iterator.next();
-            if(transaction != null && !transaction.isValid() && transaction.order != null && transaction.order.getId().equals(order.getId())) {
+            if(!transaction.isValid()) iterator.remove();
+            else if(transaction != null && transaction.isValid() && transaction.order != null && transaction.order.getId().equals(order.getId())) {
                 iterator.remove();
             }
         }
@@ -577,7 +578,6 @@ public class CrazyHedge implements IStrategy {
 
                 if(parent.nextProfit != null) {
                     deleteTransactionByOrder(parent.nextProfit.order);
-
                     parent.nextProfit.closeOrder(1);
                     parent.nextProfit = null;
                 }
