@@ -17,6 +17,7 @@ public class CrazyHedge implements IStrategy {
         public int level = 1;
         public int winningStreak = 0;
         public IOrder order;
+        public Double price;
 
         //if parent is NOT null transaction is a hedge, will NOT be hedged again
         public Transaction parent;
@@ -34,10 +35,10 @@ public class CrazyHedge implements IStrategy {
             */
 
             Double takeProfit = null;
-            if(command == IEngine.OrderCommand.BUY) {
+            if(command == IEngine.OrderCommand.BUY || command == IEngine.OrderCommand.BUYSTOP) {
                 takeProfit = price + takeProfitPips * instrument.getPipValue();
             }
-            else if(command == IEngine.OrderCommand.SELL) {
+            else if(command == IEngine.OrderCommand.SELL || command == IEngine.OrderCommand.SELLSTOP) {
                 takeProfit = price - takeProfitPips * instrument.getPipValue();
             }
             if(takeProfit == null) {
@@ -47,27 +48,26 @@ public class CrazyHedge implements IStrategy {
             double stopLoss = 0.0d;
 
             if(stopLossPips > 0) {
-                if(command == IEngine.OrderCommand.BUY) {
+                if(command == IEngine.OrderCommand.BUY || command == IEngine.OrderCommand.BUYSTOP) {
                     stopLoss = price - stopLossPips * instrument.getPipValue();
                 }
-                else if(command == IEngine.OrderCommand.SELL) {
+                else if(command == IEngine.OrderCommand.SELL || command == IEngine.OrderCommand.SELLSTOP) {
                     stopLoss = price + stopLossPips * instrument.getPipValue();
                 }
             }
 
             //console.getOut().println("STOP LOSS FOR ORDER IS = " + stopLoss);
 
+            this.price = price;
             this.parent = parent;
             this.level = level;
             this.winningStreak = level - 1;
 
             try {
-                order = openOrder(instrument, command, lots * level, stopLoss, takeProfit);
+                order = openOrder(instrument, command, price, lots * level, stopLoss, takeProfit);
             } catch (JFException e) {
                 e.printStackTrace();
             }
-
-
         }
 
         public Transaction(IEngine.OrderCommand command, double price) {
@@ -78,6 +78,48 @@ public class CrazyHedge implements IStrategy {
             this(command, price, level, null);
         }
 
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Transaction that = (Transaction) o;
+
+            if (level != that.level) return false;
+            if (winningStreak != that.winningStreak) return false;
+            if (!order.equals(that.order)) return false;
+            return price.equals(that.price);
+
+        }
+
+        @Override
+        public int hashCode() {
+            int result = level;
+            result = 31 * result + winningStreak;
+            result = 31 * result + order.hashCode();
+            result = 31 * result + price.hashCode();
+            return result;
+        }
+
+        public List<Transaction> addWaitingOrders() {
+            if(order.getOrderCommand() == IEngine.OrderCommand.BUY) {
+                this.nextProfit = new Transaction(IEngine.OrderCommand.BUYSTOP, order.getTakeProfitPrice(), level + 1, this);
+                this.hedge = new Transaction(IEngine.OrderCommand.SELLSTOP, order.getOpenPrice() - (openHedgeAfterLossPips * instrument.getPipValue()), level - 1, this);
+            }
+            else if(order.getOrderCommand() == IEngine.OrderCommand.SELL) {
+                this.nextProfit = new Transaction(IEngine.OrderCommand.SELLSTOP, order.getTakeProfitPrice(), level + 1, this);
+                this.hedge = new Transaction(IEngine.OrderCommand.BUYSTOP, order.getOpenPrice() + (openHedgeAfterLossPips * instrument.getPipValue()), level - 1, this);
+            }
+
+            if(hedge != null && !hedge.isValid()) hedge = null;
+
+            List<Transaction> transactions = new ArrayList<Transaction>();
+            if(this.hedge != null) transactions.add(this.hedge);
+            if(this.nextProfit != null) transactions.add(this.nextProfit);
+            return transactions;
+        }
+
+        /*
         public boolean watchLoss(double price) throws JFException {
             if(!isValid()) return false;
             //if(parent == null && hedge == null && order != null && order.getState() == IOrder.State.FILLED && order.getProfitLossInPips() < -openHedgeAfterLossPips) {
@@ -95,7 +137,9 @@ public class CrazyHedge implements IStrategy {
             }
             return false;
         }
+        */
 
+        /*
         public boolean watchProfit(double price) {
             if(!isValid()) return false;
             if(order.getState() == IOrder.State.CLOSED) {
@@ -118,29 +162,39 @@ public class CrazyHedge implements IStrategy {
             }
             return false;
         }
+        */
 
         public boolean isValid() {
-            if(order == null) {
-                return false;
-            }
-            return true;
+            return order != null;
         }
 
+        /**
+         * Doesn't stop stop loss and take profit, uses the current price.
+         * @return
+         * @throws JFException
+         */
         protected IOrder openOrder(Instrument instrument, IEngine.OrderCommand command, double lot) throws JFException {
             return openOrder(instrument, command, lot, 0, 0);
         }
 
-        protected IOrder openOrder(Instrument instrument, IEngine.OrderCommand command, double lot, double stopLoss, double takeProfit) throws JFException {
+        /**
+         * Uses the current price.
+         * @throws JFException
+         */
+        IOrder openOrder(Instrument instrument, IEngine.OrderCommand command, double lot, double stopLoss, double takeProfit) throws JFException {
+            double lastAskPrice = history.getLastTick(instrument).getAsk();
+            return openOrder(instrument, command, lastAskPrice, lot, stopLoss, takeProfit);
+        }
+
+        IOrder openOrder(Instrument instrument, IEngine.OrderCommand command, double price, double lot, double stopLoss, double takeProfit) throws JFException {
             IOrder order = null;
-            if ( command == IEngine.OrderCommand.BUY ) {
-                double lastAskPrice = history.getLastTick(instrument).getAsk();
-                order = engine.submitOrder(getLabel(instrument), instrument, IEngine.OrderCommand.BUY, lot, lastAskPrice, slippage, stopLoss, takeProfit);
-            } else if ( command == IEngine.OrderCommand.SELL ) {
-                double lastBidPrice = history.getLastTick(instrument).getBid();
-                order = engine.submitOrder(getLabel(instrument), instrument, IEngine.OrderCommand.SELL, lot, lastBidPrice, slippage, stopLoss, takeProfit);
+            if ( command == IEngine.OrderCommand.BUY || command == IEngine.OrderCommand.BUYSTOP ) {
+                order = engine.submitOrder(getLabel(instrument), instrument, command, lot, price, slippage, stopLoss, takeProfit);
+            } else if ( command == IEngine.OrderCommand.SELL || command == IEngine.OrderCommand.SELLSTOP ) {
+                order = engine.submitOrder(getLabel(instrument), instrument, command, lot, price, slippage, stopLoss, takeProfit);
             }
             if ( order != null ) {
-                console.getOut().println("ORDER PLACED FOR = "+lot*1000000/100+" EUR at "+new DateTime( history.getBar(instrument, periodOpen, OfferSide.ASK, 0).getTime()).toString() );
+                console.getOut().println("ORDER PLACED FOR = " + lot * 1000000 / 100 + " EUR at " + new DateTime(history.getBar(instrument, periodOpen, OfferSide.ASK, 0).getTime()).toString());
             }
             return order;
         }
@@ -182,10 +236,14 @@ public class CrazyHedge implements IStrategy {
             }
         }
 
-        protected void closeOrder(double part) throws JFException {
-            if(order != null && order.getState() == IOrder.State.FILLED) {
-                double orderLot = order.getAmount();
-                order.close(orderLot * part);
+        void closeOrder(double part) throws JFException {
+            if(order != null && (order.getState() == IOrder.State.FILLED || order.getState() == IOrder.State.OPENED) ) {
+                if(part == 1) {
+                    order.close();
+                } else {
+                    double orderLot = order.getAmount();
+                    order.close(orderLot * part);
+                }
             }
         }
 
@@ -196,9 +254,7 @@ public class CrazyHedge implements IStrategy {
     private IHistory history = null;
     private int tagCounter = 0;
     private IConsole console;
-    private IChart chart;
     private IContext context = null;
-    private IAccount account = null;
 
     @Configurable("Lot")
     public double lots = 0.01;
@@ -232,17 +288,8 @@ public class CrazyHedge implements IStrategy {
     public boolean waitForAdx = true;
     public Double startMoney;
 
-    private int precision = 5;
     private Instrument instrument = Instrument.EURUSD;
 
-    private String AccountCurrency = "";
-    private double Leverage;
-    private String AccountId = "";
-    private double Equity;
-    private double UseofLeverage;
-    private int OverWeekendEndLeverage;
-    private int MarginCutLevel;
-    private boolean GlobalAccount;
     private long lastCrossTime;
     private List<Transaction> transactionList;
 
@@ -255,26 +302,27 @@ public class CrazyHedge implements IStrategy {
         this.indicators = context.getIndicators();
         this.history = context.getHistory();
         this.console = context.getConsole();
-        this.chart = context.getChart(Instrument.EURUSD);
+        IChart chart = context.getChart(Instrument.EURUSD);
 
         subscriptionInstrumentCheck(instrument);
 
         this.transactionList = new ArrayList<Transaction>();
 
-        this.console.getOut().println("Started");
+        this.console.getInfo().println("Started");
 
-        this.account = context.getAccount();
-        startMoney = this.account.getEquity();
+        IAccount account = context.getAccount();
+        startMoney = account.getEquity();
     }
 
     public void onStop() throws JFException {
         closeAll();
-        console.getOut().println("Stopped");
+        console.getInfo().println("Stopped");
     }
 
     public void onTick(Instrument instrument, ITick tick) throws JFException {
         if(waitForAdx) return;
 
+        /*
         int positions = positionsTotal(instrument);
 
         if(positions == 0) {
@@ -303,6 +351,7 @@ public class CrazyHedge implements IStrategy {
                 }
             }
         }
+        */
     }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
@@ -333,6 +382,7 @@ public class CrazyHedge implements IStrategy {
 
                         Transaction transaction = new Transaction(IEngine.OrderCommand.BUY, askBar.getClose());
                         transactionList.add(transaction);
+                        transactionList.addAll(transaction.addWaitingOrders());
 
                         waitForAdx = false;
 
@@ -349,6 +399,7 @@ public class CrazyHedge implements IStrategy {
 
                         Transaction transaction = new Transaction(IEngine.OrderCommand.SELL, bidBar.getClose());
                         transactionList.add(transaction);
+                        transactionList.addAll(transaction.addWaitingOrders());
 
                         waitForAdx = false;
                     }
@@ -358,20 +409,14 @@ public class CrazyHedge implements IStrategy {
     }
 
     private boolean hasAdxCrossed(double adxdi_plus_last, double adxdi_plus_current, double adxdi_minus_last, double adxdi_minus_current) {
-        if((adxdi_minus_last < adxdi_plus_last && adxdi_minus_current > adxdi_plus_current) ||
-                (adxdi_minus_last > adxdi_plus_last && adxdi_minus_current < adxdi_plus_current)) {
-            return true;
-        }
-        return false;
+        return (adxdi_minus_last < adxdi_plus_last && adxdi_minus_current > adxdi_plus_current) ||
+                (adxdi_minus_last > adxdi_plus_last && adxdi_minus_current < adxdi_plus_current);
     }
 
     private boolean checkForValidCross(long last_cross, long current_time) {
         long diff = current_time - last_cross;
         long diff_mins = diff / 60;
-        if(diff_mins <= validCrossForMinutes) {
-            return true;
-        }
-        return false;
+        return diff_mins <= validCrossForMinutes;
     }
 
     private IBar getPreviousBar(Period period, IBar bar) throws JFException {
@@ -391,7 +436,7 @@ public class CrazyHedge implements IStrategy {
 
     private Transaction findTransactionByOrder(IOrder order) {
         for(Transaction transaction : transactionList) {
-            if(transaction != null && transaction.isValid() && transaction.order.getId() == order.getId()) return transaction;
+            if(transaction != null && transaction.isValid() && transaction.order.getId().equals(order.getId())) return transaction;
         }
         return null;
     }
@@ -399,7 +444,7 @@ public class CrazyHedge implements IStrategy {
     private void deleteTransactionByOrder(IOrder order) {
         for(Iterator<Transaction> iterator = transactionList.iterator(); iterator.hasNext(); ) {
             Transaction transaction = iterator.next();
-            if(transaction != null && !transaction.isValid() && transaction.order.getId() == order.getId()) {
+            if(transaction != null && !transaction.isValid() && transaction.order != null && transaction.order.getId().equals(order.getId())) {
                 iterator.remove();
             }
         }
@@ -464,6 +509,7 @@ public class CrazyHedge implements IStrategy {
             }
         }
         if ( lot != 0.0d ) {
+            int precision = 5;
             profit = round(profit/ lot, precision);
         }
         return profit;
@@ -479,6 +525,16 @@ public class CrazyHedge implements IStrategy {
 
     protected void printErr(String err) {
         console.getErr().println(err);
+    }
+
+    protected void log(String log) {
+        try {
+            long time = history.getTick(instrument, 0).getTime();
+            DateTime date = new DateTime(time);
+            console.getOut().println("["+date.toString("YYYY-MM-DD HH:mm:ss")+"] "+ log);
+        } catch (JFException e) {
+            e.printStackTrace();
+        }
     }
 
     public void subscriptionInstrumentCheck(Instrument instrument) {
@@ -504,6 +560,30 @@ public class CrazyHedge implements IStrategy {
 
     public void onMessage(IMessage message) throws JFException {
         if(message.getType() == IMessage.Type.ORDER_FILL_OK) {
+            log("Order fill ok with state "+message.getOrder().getState() + " and command " + message.getOrder().getOrderCommand());
+            Transaction transaction = findTransactionByOrder(message.getOrder());
+            if(transaction == null) return;
+            Transaction parent = transaction.parent;
+            if(parent == null) return;
+            if(parent.nextProfit != null && parent.nextProfit.hashCode() == transaction.hashCode()) {
+
+                if(parent.hedge != null) {
+                    deleteTransactionByOrder(parent.hedge.order);
+                    parent.hedge.closeOrder(1);
+                    parent.hedge = null;
+                }
+            }
+            else if(parent.hedge != null && parent.hedge.hashCode() == transaction.hashCode()) {
+
+                if(parent.nextProfit != null) {
+                    deleteTransactionByOrder(parent.nextProfit.order);
+
+                    parent.nextProfit.closeOrder(1);
+                    parent.nextProfit = null;
+                }
+            }
+
+            transactionList.addAll(transaction.addWaitingOrders());
         }
         else if(message.getType() == IMessage.Type.ORDER_FILL_REJECTED) {
             deleteTransactionByOrder(message.getOrder());
@@ -512,11 +592,12 @@ public class CrazyHedge implements IStrategy {
             deleteTransactionByOrder(message.getOrder());
         }
         else if(message.getType() == IMessage.Type.ORDER_CHANGED_OK || message.getType() == IMessage.Type.ORDER_CHANGED_REJECTED) {
-            console.getOut().println(message);
+            console.getErr().println(message);
         }
         else if(message.getType() == IMessage.Type.ORDER_CLOSE_OK) {
             if(message.getReasons().contains(IMessage.Reason.ORDER_CLOSED_BY_TP)) {
-
+                log("Ordered closed by tp");
+                /*
                 if( (account.getEquity() / startMoney) > ((double) targetProfitPerc / 100d + 1)) {
                     console.getOut().println(account.getEquity() + " " + startMoney + " Closing all transactions because target profit is hit");
                     closeAll();
@@ -531,6 +612,7 @@ public class CrazyHedge implements IStrategy {
                     transaction.watchProfit(history.getTick(instrument, 0).getBid());
                     transactionList.add(transaction.nextProfit);
                 }
+                */
 
                 deleteTransactionByOrder(message.getOrder());
             }
@@ -543,14 +625,14 @@ public class CrazyHedge implements IStrategy {
     }
 
     public void onAccount(IAccount account) throws JFException {
-        AccountCurrency = account.getCurrency().toString();
-        Leverage = account.getLeverage();
-        AccountId= account.getAccountId();
-        Equity = account.getEquity();
-        UseofLeverage = account.getUseOfLeverage();
-        OverWeekendEndLeverage = account.getOverWeekEndLeverage();
-        MarginCutLevel = account.getMarginCutLevel();
-        GlobalAccount = account.isGlobal();
+        String accountCurrency = account.getCurrency().toString();
+        double leverage = account.getLeverage();
+        String accountId = account.getAccountId();
+        double equity = account.getEquity();
+        double useofLeverage = account.getUseOfLeverage();
+        int overWeekendEndLeverage = account.getOverWeekEndLeverage();
+        int marginCutLevel = account.getMarginCutLevel();
+        boolean globalAccount = account.isGlobal();
     }
 
 }
