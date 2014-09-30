@@ -1,7 +1,6 @@
 package main.java.jforex;
 
 import com.dukascopy.api.*;
-import com.dukascopy.transport.common.model.type.OrderDirection;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
