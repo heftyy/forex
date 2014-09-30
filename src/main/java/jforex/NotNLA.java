@@ -20,8 +20,6 @@ public class NotNLA implements IStrategy {
     private IChart chart;
     private IContext context = null;
 
-    @Configurable("Maximum trades")
-    public int maxTrades = 5;
     @Configurable("Lot")
     public double lots = 0.5;
     @Configurable("Slippage")
