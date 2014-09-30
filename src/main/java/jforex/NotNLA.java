@@ -25,7 +25,7 @@ public class NotNLA implements IStrategy {
     @Configurable("Slippage")
     public int slippage = 5;
     @Configurable("Period")
-    public Period period = Period.FIFTEEN_MINS;
+    public Period period = Period.ONE_HOUR;
     @Configurable("TP max")
     public int takeProfitMaxPips = 30;
     @Configurable("TP min")
@@ -79,7 +79,7 @@ public class NotNLA implements IStrategy {
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
         if (period == this.period)  {
-            IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 1);
+            IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 2);
             //LONG
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.BUY) {
                 boolean trendMatch = true;
@@ -130,8 +130,10 @@ public class NotNLA implements IStrategy {
         result = checkBarsInverse(lastBar, bar);
         if(result != null) return result;
 
+        /*
         result = checkBarsSequence(bar);
         if(result != null) return result;
+        */
 
         return null;
     }
@@ -149,31 +151,31 @@ public class NotNLA implements IStrategy {
     }
 
     private IEngine.OrderCommand checkBarsSequence(IBar bar) throws JFException {
-        //LONG
-        if(getBarDirection(bar) == Direction.UP) {
-            for(int i = 1;  ; i++) {
-                IBar previousBar = history.getBar(instrument, period, OfferSide.ASK, i);
-                if(getBarDirection(previousBar) == getBarDirection(bar)) {
-                    continue;
+        for(int i = 1;  ; i++) {
+            IBar previousBar = history.getBar(instrument, period, OfferSide.ASK, i);
+            if(previousBar.equals(bar)) break;
+            if(getBarDirection(previousBar) == null || getBarDirection(bar) == null) break;
+
+            if(getBarDirection(previousBar) == getBarDirection(bar)) {
+                continue;
+            }
+            else {
+                //LONG
+                if(getBarDirection(bar) == Direction.UP && bar.getClose() > previousBar.getOpen()) {
+                    return IEngine.OrderCommand.BUY;
                 }
-                else {
-                    //LONG
-                    if(getBarDirection(bar) == Direction.UP && bar.getClose() > previousBar.getOpen()) {
-                        return IEngine.OrderCommand.BUY;
-                    }
-                    //SHORT
-                    if(getBarDirection(bar) == Direction.DOWN && bar.getClose() < previousBar.getOpen()) {
-                        return IEngine.OrderCommand.SELL;
-                    }
-                    break;
+                //SHORT
+                if(getBarDirection(bar) == Direction.DOWN && bar.getClose() < previousBar.getOpen()) {
+                    return IEngine.OrderCommand.SELL;
                 }
+                break;
             }
         }
         return null;
     }
 
     private Direction getBarDirection(IBar bar) {
-        if(bar.getOpen() != 0 && bar.getClose() != 0) {
+        if(bar.getOpen() == 0 || bar.getClose() == 0) {
             return null;
         }
         else if(bar.getOpen() < bar.getClose()) {
