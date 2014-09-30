@@ -37,7 +37,7 @@ public class NotNLA implements IStrategy {
     public int stopLossPips = 20;
     @Configurable("")
     public Set<Period> periods = new HashSet<Period>(
-        Arrays.asList(new Period[]{Period.ONE_HOUR, Period.DAILY})
+        Arrays.asList(new Period[]{Period.DAILY})
     );
 
     private int precision = 5;
@@ -91,6 +91,7 @@ public class NotNLA implements IStrategy {
                         trendMatch = false;
                     }
                 }
+
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
                 if(trendMatch) {
@@ -127,7 +128,18 @@ public class NotNLA implements IStrategy {
         }
     }
 
-    private IEngine.OrderCommand checkBars(IBar lastBar, IBar bar) {
+    private IEngine.OrderCommand checkBars(IBar lastBar, IBar bar) throws JFException {
+        IEngine.OrderCommand result;
+        result = checkBarsInverse(lastBar, bar);
+        if(result != null) return result;
+
+        result = checkBarsSequence(bar);
+        if(result != null) return result;
+
+        return null;
+    }
+
+    private IEngine.OrderCommand checkBarsInverse(IBar lastBar, IBar bar) {
         //LONG
         if(getBarDirection(lastBar) == Direction.DOWN && getBarDirection(bar) == Direction.UP && bar.getClose() > lastBar.getOpen() ) {
             return IEngine.OrderCommand.BUY;
@@ -135,6 +147,30 @@ public class NotNLA implements IStrategy {
         //SHORT
         if(getBarDirection(lastBar) == Direction.UP && getBarDirection(bar) == Direction.DOWN && bar.getClose() < lastBar.getOpen()) {
             return IEngine.OrderCommand.SELL;
+        }
+        return null;
+    }
+
+    private IEngine.OrderCommand checkBarsSequence(IBar bar) throws JFException {
+        //LONG
+        if(getBarDirection(bar) == Direction.UP) {
+            for(int i = 1;  ; i++) {
+                IBar previousBar = history.getBar(instrument, period, OfferSide.ASK, i);
+                if(getBarDirection(previousBar) == getBarDirection(bar)) {
+                    continue;
+                }
+                else {
+                    //LONG
+                    if(getBarDirection(bar) == Direction.UP && bar.getClose() > previousBar.getOpen()) {
+                        return IEngine.OrderCommand.BUY;
+                    }
+                    //SHORT
+                    if(getBarDirection(bar) == Direction.DOWN && bar.getClose() < previousBar.getOpen()) {
+                        return IEngine.OrderCommand.SELL;
+                    }
+                    break;
+                }
+            }
         }
         return null;
     }
