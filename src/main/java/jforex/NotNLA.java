@@ -26,12 +26,14 @@ public class NotNLA implements IStrategy {
     public int slippage = 5;
     @Configurable("Period")
     public Period period = Period.ONE_HOUR;
-    @Configurable("TP max")
+    @Configurable("TP max [pips]")
     public int takeProfitMaxPips = 30;
-    @Configurable("TP min")
+    @Configurable("TP min [pips]")
     public int takeProfitMinPips = 10;
-    @Configurable("SL")
+    @Configurable("SL [pips]")
     public int stopLossPips = 20;
+    @Configurable("Min bar size[pips]")
+    public int minBarSize = 10;
     @Configurable("")
     public Set<Period> periods = new HashSet<Period>(
         Arrays.asList(new Period[]{Period.DAILY})
@@ -78,8 +80,9 @@ public class NotNLA implements IStrategy {
     }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
-        if (period == this.period)  {
-            IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 2);
+        IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 2);
+
+        if (period == this.period && positionsTotal(instrument) == 0)  {
             //LONG
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.BUY) {
                 boolean trendMatch = true;
@@ -110,6 +113,7 @@ public class NotNLA implements IStrategy {
                         trendMatch = false;
                     }
                 }
+
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
                 if(trendMatch) {
@@ -123,9 +127,29 @@ public class NotNLA implements IStrategy {
                 openOrder(instrument, IEngine.OrderCommand.SELL, lots, stopLoss, takeProfit);
             }
         }
+
+        else if (period == this.period && positionsTotal(instrument) > 0)  {
+            checkForClose(lastBar, askBar);
+        }
+    }
+
+    private void checkForClose(IBar lastBar, IBar bar) throws JFException {
+        for(IOrder order : engine.getOrders()) {
+            if (order.getState() == IOrder.State.FILLED) {
+                //LONG
+                if(order.isLong()) {
+                    if(checkBars(lastBar, bar) == IEngine.OrderCommand.SELL) order.close();
+                }
+                else {
+                    if(checkBars(lastBar, bar) == IEngine.OrderCommand.BUY) order.close();
+                }
+            }
+        }
     }
 
     private IEngine.OrderCommand checkBars(IBar lastBar, IBar bar) throws JFException {
+        if(getBarSizePips(lastBar) < minBarSize || getBarSizePips(bar) < minBarSize) return null;
+
         IEngine.OrderCommand result;
         result = checkBarsInverse(lastBar, bar);
         if(result != null) return result;
@@ -185,6 +209,12 @@ public class NotNLA implements IStrategy {
             return Direction.DOWN;
         }
         return null;
+    }
+
+    private int getBarSizePips(IBar bar) {
+        Double difference = Math.abs(bar.getOpen() - bar.getClose());
+        Long differencePips = Math.round(difference / instrument.getPipValue());
+        return differencePips.intValue();
     }
 
     protected void setTakeProfit(Instrument instrument, double takeProfit) throws JFException {
