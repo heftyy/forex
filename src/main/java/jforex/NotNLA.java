@@ -33,7 +33,9 @@ public class NotNLA implements IStrategy {
     @Configurable("SL [pips]")
     public int stopLossPips = 20;
     @Configurable("Min bar size[pips]")
-    public int minBarSize = 10;
+    public int minBarSize = 1;
+    @Configurable("Attempt close after profit[pips]")
+    public int attemptCloseAfterProfit = 30;
     @Configurable("")
     public Set<Period> periods = new HashSet<Period>(
         Arrays.asList(new Period[]{Period.DAILY})
@@ -75,9 +77,7 @@ public class NotNLA implements IStrategy {
         console.getOut().println("Stopped");
     }
 
-    public void onTick(Instrument instrument, ITick tick) throws JFException {
-        System.out.println(tick.getAsk());
-    }
+    public void onTick(Instrument instrument, ITick tick) throws JFException { }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
         IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 2);
@@ -87,10 +87,12 @@ public class NotNLA implements IStrategy {
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.BUY) {
                 boolean trendMatch = true;
                 for(Period p : periods) {
-                    if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.ASK, 1)) == Direction.DOWN) {
+                    if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.ASK, 0)) == Direction.DOWN) {
                         trendMatch = false;
                     }
                 }
+
+                if(!trendMatch && takeProfitMinPips == 0) return;
 
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
@@ -109,10 +111,12 @@ public class NotNLA implements IStrategy {
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.SELL) {
                 boolean trendMatch = true;
                 for(Period p : periods) {
-                    if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.BID, 1)) == Direction.UP) {
+                    if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.BID, 0)) == Direction.UP) {
                         trendMatch = false;
                     }
                 }
+
+                if(!trendMatch && takeProfitMinPips == 0) return;
 
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
@@ -136,6 +140,8 @@ public class NotNLA implements IStrategy {
     private void checkForClose(IBar lastBar, IBar bar) throws JFException {
         for(IOrder order : engine.getOrders()) {
             if (order.getState() == IOrder.State.FILLED) {
+                if(order.getProfitLossInPips() < attemptCloseAfterProfit) continue;
+
                 //LONG
                 if(order.isLong()) {
                     if(checkBars(lastBar, bar) == IEngine.OrderCommand.SELL) order.close();
