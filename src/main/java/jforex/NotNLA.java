@@ -34,6 +34,8 @@ public class NotNLA implements IStrategy {
     public int stopLossPips = 20;
     @Configurable("Min bar size[pips]")
     public int minBarSize = 1;
+    @Configurable("Min difference for sequence bars [pips]")
+    public int minDifferenceForSequence = 5;
     @Configurable("Attempt close after profit[pips]")
     public int attemptCloseAfterProfit = 30;
     @Configurable("")
@@ -146,6 +148,7 @@ public class NotNLA implements IStrategy {
                 if(order.isLong()) {
                     if(checkBars(lastBar, bar) == IEngine.OrderCommand.SELL) order.close();
                 }
+                //SELL
                 else {
                     if(checkBars(lastBar, bar) == IEngine.OrderCommand.BUY) order.close();
                 }
@@ -160,10 +163,8 @@ public class NotNLA implements IStrategy {
         result = checkBarsInverse(lastBar, bar);
         if(result != null) return result;
 
-        /*
-        result = checkBarsSequence(bar);
+        result = checkBarsSequence(lastBar, bar);
         if(result != null) return result;
-        */
 
         return null;
     }
@@ -180,26 +181,16 @@ public class NotNLA implements IStrategy {
         return null;
     }
 
-    private IEngine.OrderCommand checkBarsSequence(IBar bar) throws JFException {
-        for(int i = 1;  ; i++) {
-            IBar previousBar = history.getBar(instrument, period, OfferSide.ASK, i);
-            if(previousBar.equals(bar)) break;
-            if(getBarDirection(previousBar) == null || getBarDirection(bar) == null) break;
-
-            if(getBarDirection(previousBar) == getBarDirection(bar)) {
-                continue;
-            }
-            else {
-                //LONG
-                if(getBarDirection(bar) == Direction.UP && bar.getClose() > previousBar.getOpen()) {
-                    return IEngine.OrderCommand.BUY;
-                }
-                //SHORT
-                if(getBarDirection(bar) == Direction.DOWN && bar.getClose() < previousBar.getOpen()) {
-                    return IEngine.OrderCommand.SELL;
-                }
-                break;
-            }
+    private IEngine.OrderCommand checkBarsSequence(IBar lastBar, IBar bar) throws JFException {
+        //LONG
+        if( getBarDirection(lastBar) == Direction.UP && getBarDirection(bar) == Direction.UP &&
+                bar.getClose() > (lastBar.getClose() + minDifferenceForSequence * instrument.getPipValue()) ) {
+            return IEngine.OrderCommand.BUY;
+        }
+        //SELL
+        if( getBarDirection(lastBar) == Direction.DOWN && getBarDirection(bar) == Direction.DOWN &&
+                bar.getClose() < (lastBar.getClose() - minDifferenceForSequence * instrument.getPipValue()) ) {
+            return IEngine.OrderCommand.SELL;
         }
         return null;
     }
