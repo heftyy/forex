@@ -106,7 +106,7 @@ public class NotNLA implements IStrategy {
                     takeProfit = price + instrument.getPipValue() * takeProfitMinPips;
                     stopLoss = price - instrument.getPipValue() * stopLossPips;
                 }
-                openOrder(instrument, IEngine.OrderCommand.BUY, lots, stopLoss, takeProfit);
+                openOrder(instrument, IEngine.OrderCommand.BUY, lots, stopLossPips > 0 ? stopLoss : 0, takeProfit);
             }
 
             //SHORT
@@ -130,7 +130,7 @@ public class NotNLA implements IStrategy {
                     takeProfit = price - instrument.getPipValue() * takeProfitMinPips;
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
                 }
-                openOrder(instrument, IEngine.OrderCommand.SELL, lots, stopLoss, takeProfit);
+                openOrder(instrument, IEngine.OrderCommand.SELL, lots, stopLossPips > 0 ? stopLoss : 0, takeProfit);
             }
         }
 
