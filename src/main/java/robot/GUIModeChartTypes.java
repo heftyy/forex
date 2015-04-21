@@ -37,6 +37,7 @@ import com.dukascopy.api.system.ITesterClient;
 import com.dukascopy.api.system.TesterFactory;
 import com.dukascopy.api.system.tester.*;
 import main.java.jforex.CrazyHedge;
+import main.java.jforex.NotNLA;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
@@ -191,9 +192,9 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
         //setting initial deposit
         client.setInitialDeposit(Instrument.EURUSD.getSecondaryCurrency(), 50000);
 
-        DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-DD HH:mm");
-        DateTime from = DateTime.parse("2014-08-11");
-        DateTime to =   DateTime.parse("2014-08-18");
+        DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm");
+        DateTime from = DateTime.parse("2015-04-08 04:00", dtf);
+        DateTime to =   DateTime.parse("2015-04-21 12:00", dtf);
 
         client.setDataInterval(Period.ONE_MIN, OfferSide.BID,
                 ITesterClient.InterpolationMethod.FOUR_TICKS,
@@ -230,7 +231,7 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
         LOGGER.info("Starting strategy");
 
         client.startStrategy(
-                new CrazyHedge(),
+                new NotNLA(),
                 new LoadingProgressListener() {
                     @Override
                     public void dataLoaded(long startTime, long endTime, long currentTime, String information) {
@@ -307,7 +308,7 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
             comboBoxInstrument = setupComboBox(new Instrument [] {EURUSD, USDJPY, USDCAD}, "Instrument", EURUSD);
             comboBoxOfferSide = setupComboBox(OfferSide.values(), "Offer Side", OfferSide.BID);
             comboBoxFilter = setupComboBox(Filter.values(), "Filter", Filter.NO_FILTER);
-            comboBoxPeriod = setupComboBox(Period.values(), "Period", Period.TEN_MINS);
+            comboBoxPeriod = setupComboBox(Period.values(), "Period", Period.ONE_HOUR);
             comboBoxPriceRange = setupComboBox(new PriceRange [] {ONE_PIP, TWO_PIPS, THREE_PIPS, FOUR_PIPS, FIVE_PIPS, SIX_PIPS}, "Price Range", TWO_PIPS);
             comboBoxReversalAmount = setupComboBox(new ReversalAmount [] {ReversalAmount.ONE, ReversalAmount.TWO, ReversalAmount.THREE}, "Reversal Amount", ReversalAmount.TWO);
             comboBoxTickBarSize = setupComboBox(new TickBarSize [] {TWO, THREE, FOUR, FIVE}, "Tick Bar Size", THREE);

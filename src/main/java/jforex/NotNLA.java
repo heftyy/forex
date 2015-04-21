@@ -1,6 +1,7 @@
 package main.java.jforex;
 
 import com.dukascopy.api.*;
+import org.joda.time.DateTime;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -25,7 +26,7 @@ public class NotNLA implements IStrategy {
     @Configurable("Slippage")
     public int slippage = 5;
     @Configurable("Period")
-    public Period period = Period.ONE_HOUR;
+    public Period period = Period.FIFTEEN_MINS;
     @Configurable("TP max [pips]")
     public int takeProfitMaxPips = 30;
     @Configurable("TP min [pips]")
@@ -85,9 +86,18 @@ public class NotNLA implements IStrategy {
         IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 2);
 
         if (period == this.period && positionsTotal(instrument) == 0)  {
+            if(period == Period.FIFTEEN_MINS) {
+                DateTime barTime = new DateTime(askBar.getTime());
+
+                if(barTime.getMinuteOfHour() != 15) {
+                    return;
+                }
+            }
+
             //LONG
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.BUY) {
                 boolean trendMatch = true;
+                /*
                 for(Period p : periods) {
                     if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.ASK, 0)) == Direction.DOWN) {
                         trendMatch = false;
@@ -95,6 +105,7 @@ public class NotNLA implements IStrategy {
                 }
 
                 if(!trendMatch && takeProfitMinPips == 0) return;
+                */
 
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
@@ -111,7 +122,9 @@ public class NotNLA implements IStrategy {
 
             //SHORT
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.SELL) {
+
                 boolean trendMatch = true;
+                /*
                 for(Period p : periods) {
                     if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.BID, 0)) == Direction.UP) {
                         trendMatch = false;
@@ -119,6 +132,7 @@ public class NotNLA implements IStrategy {
                 }
 
                 if(!trendMatch && takeProfitMinPips == 0) return;
+                */
 
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
@@ -163,8 +177,10 @@ public class NotNLA implements IStrategy {
         result = checkBarsInverse(lastBar, bar);
         if(result != null) return result;
 
+        /*
         result = checkBarsSequence(lastBar, bar);
         if(result != null) return result;
+        */
 
         return null;
     }
@@ -256,7 +272,8 @@ public class NotNLA implements IStrategy {
             order = engine.submitOrder(getLabel(instrument), instrument, IEngine.OrderCommand.SELL, lot, lastBidPrice, slippage, stopLoss, takeProfit);
         }
         if ( order != null ) {
-            System.out.println("ORDER PLACED FOR = "+lot*1000000/100+" EUR");
+            String out = String.format("[%s] %s ORDER PLACED FOR %f EUR", new DateTime(history.getLastTick(instrument).getTime()).toString(), command, lot*1000000/100);
+            System.out.println(out);
         }
         return order;
     }
