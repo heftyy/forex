@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@Library("/home/heftyy/JForex/Strategies/libs/joda-time-2.3.jar")
 public class NotNLA implements IStrategy {
 
     public enum Direction { UP, DOWN }
