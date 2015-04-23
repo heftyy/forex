@@ -98,7 +98,7 @@ public class NotNLA implements IStrategy {
             //LONG
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.BUY) {
                 boolean trendMatch = true;
-                /*
+
                 for(Period p : periods) {
                     if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.ASK, 0)) == Direction.DOWN) {
                         trendMatch = false;
@@ -106,7 +106,7 @@ public class NotNLA implements IStrategy {
                 }
 
                 if(!trendMatch && takeProfitMinPips == 0) return;
-                */
+
 
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
@@ -125,7 +125,7 @@ public class NotNLA implements IStrategy {
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.SELL) {
 
                 boolean trendMatch = true;
-                /*
+
                 for(Period p : periods) {
                     if(getBarDirection(context.getHistory().getBar(instrument, p, OfferSide.BID, 0)) == Direction.UP) {
                         trendMatch = false;
@@ -133,7 +133,7 @@ public class NotNLA implements IStrategy {
                 }
 
                 if(!trendMatch && takeProfitMinPips == 0) return;
-                */
+
 
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
