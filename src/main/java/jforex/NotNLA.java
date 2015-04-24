@@ -283,7 +283,14 @@ public class NotNLA implements IStrategy {
         ZeroLine.removeOldLines(zeroLines, bar, period);
         double lastBarSize = getBarSizePips(lastBar);
         double currentBarSize = getBarSizePips(bar);
-        if(currentBarSize > 2 * lastBarSize) {
+
+        Direction barDirection = getBarDirection(bar);
+        Direction lastBarDirection = getBarDirection(lastBar);
+
+        if(barDirection == null || lastBarDirection == null) return;
+
+        //create ZL when the current bar is twice the size of the last one and they have different directions
+        if(currentBarSize > 2 * lastBarSize && barDirection != lastBarDirection) {
             if(getBarDirection(bar) == Direction.UP && lastBar.getHigh() < bar.getClose()) {
                 ZeroLine zl = new ZeroLine(lastBar.getHigh(), IEngine.OrderCommand.BUY, period, lastBar.getTime(), chart);
                 print(zl.toString());
