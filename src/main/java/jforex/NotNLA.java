@@ -312,11 +312,11 @@ public class NotNLA implements IStrategy {
             if(period != zl.period) continue;
             if(cmd == IEngine.OrderCommand.BUY) {
                 if(zl.price > price && result == null) result = zl;
-                if(zl.price > price && zl.price < result.price) result = zl;
+                if(result != null && zl.price > price && zl.price < result.price) result = zl;
             }
             else if(cmd == IEngine.OrderCommand.SELL) {
                 if(zl.price < price && result == null) result = zl;
-                if(zl.price < price && zl.price > result.price) result = zl;
+                if(result != null && zl.price < price && zl.price > result.price) result = zl;
             }
         }
         return result;
