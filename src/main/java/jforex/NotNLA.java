@@ -74,7 +74,7 @@ public class NotNLA implements IStrategy {
 
         @Override
         public String toString() {
-            return this.price+"\t"+this.period+"\t"+this.command+"\t"+this.time;
+            return this.price+"   \t"+this.period+"   \t"+this.command+"   \t"+this.time;
         }
     }
 
