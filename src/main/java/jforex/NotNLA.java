@@ -38,7 +38,7 @@ public class NotNLA implements IStrategy {
         private void endLine(long endTime) {
             shortLine.setTime(1, endTime);
             shortLine.setColor(Color.LIGHT_GRAY);
-            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
+//            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
 //            shortLine.setText("");
 //            chart.remove(shortLine);
         }
@@ -66,9 +66,9 @@ public class NotNLA implements IStrategy {
                     time.getMillis(), price,
                     System.currentTimeMillis(), price);
 //            shortLine.setText("ZL "+this.command+" "+this.period);
-            if(this.command == IEngine.OrderCommand.BUY) shortLine.setColor(Color.BLACK);
+            if(this.command == IEngine.OrderCommand.BUY) shortLine.setColor(DARK_GREEN);
             if(this.command == IEngine.OrderCommand.SELL) shortLine.setColor(Color.RED);
-            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
+//            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
             chart.add(shortLine);
         }
 
@@ -286,11 +286,13 @@ public class NotNLA implements IStrategy {
         if(currentBarSize > 2 * lastBarSize) {
             if(getBarDirection(bar) == Direction.UP && lastBar.getHigh() < bar.getClose()) {
                 ZeroLine zl = new ZeroLine(lastBar.getHigh(), IEngine.OrderCommand.BUY, period, lastBar.getTime(), chart);
+                print(zl.toString());
                 zeroLines.add(zl);
                 zl.render();
             }
             if(getBarDirection(bar) == Direction.DOWN && lastBar.getLow() > bar.getClose()) {
                 ZeroLine zl = new ZeroLine(lastBar.getLow(), IEngine.OrderCommand.SELL, period, lastBar.getTime(), chart);
+                print(zl.toString());
                 zeroLines.add(zl);
                 zl.render();
             }
@@ -417,6 +419,10 @@ public class NotNLA implements IStrategy {
 
     private static double round(double amount, int decimalPlaces) {
         return (new BigDecimal(amount)).setScale(decimalPlaces, BigDecimal.ROUND_HALF_UP).doubleValue();
+    }
+
+    protected void print(String msg) {
+        console.getInfo().println(msg);
     }
 
     protected void printErr(String err) {
