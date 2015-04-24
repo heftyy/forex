@@ -1,18 +1,82 @@
 package main.java.jforex;
 
 import com.dukascopy.api.*;
+import com.dukascopy.api.drawings.IChartObjectFactory;
+import com.dukascopy.api.drawings.IShortLineChartObject;
 import org.joda.time.DateTime;
 
+import java.awt.*;
 import java.math.BigDecimal;
-import java.util.Arrays;
-import java.util.HashSet;
+import java.util.*;
 import java.util.List;
-import java.util.Set;
 
 @Library("/home/heftyy/JForex/Strategies/libs/joda-time-2.3.jar")
 public class NotNLA implements IStrategy {
 
     public enum Direction { UP, DOWN }
+
+    private static class ZeroLine {
+        protected double price;
+        protected IEngine.OrderCommand command;
+        protected Period period;
+        protected DateTime time;
+        private UUID uuid;
+        private IShortLineChartObject shortLine;
+        private IChart chart;
+        private IChartObjectFactory factory;
+
+        ZeroLine(double price, IEngine.OrderCommand cmd, Period period, long time, IChart chart) {
+            this.price = price;
+            this.command = cmd;
+            this.period = period;
+            this.time = new DateTime(time);
+            this.uuid = UUID.randomUUID();
+            this.chart = chart;
+            this.factory = chart.getChartObjectFactory();
+        }
+
+        private void endLine(long endTime) {
+            shortLine.setTime(1, endTime);
+            shortLine.setColor(Color.LIGHT_GRAY);
+            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
+//            shortLine.setText("");
+//            chart.remove(shortLine);
+        }
+
+        protected static void removeOldLines(List<ZeroLine> zeroLines, IBar bar, Period period) {
+            for (Iterator<ZeroLine> it = zeroLines.iterator(); it.hasNext();) {
+                ZeroLine zl = it.next();
+                if(period == zl.period) {
+                    if(bar.getOpen() > zl.price && bar.getClose() < zl.price) {
+                        zl.endLine(bar.getTime());
+                        it.remove();
+                        continue;
+                    }
+                    if(bar.getOpen() < zl.price && bar.getClose() > zl.price) {
+                        zl.endLine(bar.getTime());
+                        it.remove();
+                        continue;
+                    }
+                }
+            }
+        }
+
+        private void render() {
+            shortLine = factory.createShortLine("zl_"+uuid.toString(),
+                    time.getMillis(), price,
+                    System.currentTimeMillis(), price);
+//            shortLine.setText("ZL "+this.command+" "+this.period);
+            if(this.command == IEngine.OrderCommand.BUY) shortLine.setColor(Color.BLACK);
+            if(this.command == IEngine.OrderCommand.SELL) shortLine.setColor(Color.RED);
+            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
+            chart.add(shortLine);
+        }
+
+        @Override
+        public String toString() {
+            return this.price+"\t"+this.period+"\t"+this.command+"\t"+this.time;
+        }
+    }
 
     private IEngine engine = null;
     private IIndicators indicators = null;
@@ -28,6 +92,10 @@ public class NotNLA implements IStrategy {
     public int slippage = 5;
     @Configurable("Period")
     public Period period = Period.FIFTEEN_MINS;
+    @Configurable("Period ZL")
+    public Period periodZL = Period.FOUR_HOURS;
+    @Configurable("TP before ZL")
+    public int takeProfitBeforeZLPips = 12;
     @Configurable("TP max [pips]")
     public int takeProfitMaxPips = 30;
     @Configurable("TP min [pips]")
@@ -45,6 +113,8 @@ public class NotNLA implements IStrategy {
         Arrays.asList(new Period[]{Period.DAILY})
     );
 
+    private static Color DARK_GREEN = Color.getHSBColor(102f / 360, 1f, 0.4f);
+
     private int precision = 5;
     private Instrument instrument = Instrument.EURUSD;
 
@@ -57,6 +127,8 @@ public class NotNLA implements IStrategy {
     private int MarginCutLevel;
     private boolean GlobalAccount;
 
+    private List<ZeroLine> zeroLines;
+
     public void onStart(IContext context) throws JFException {
         this.context = context;
         this.engine = context.getEngine();
@@ -64,12 +136,13 @@ public class NotNLA implements IStrategy {
         this.history = context.getHistory();
         this.console = context.getConsole();
         this.chart = context.getChart(Instrument.EURUSD);
+        this.zeroLines = new ArrayList<ZeroLine>();
 
-        /*
-        this.bidBar = context.getHistory().getBar(instrument, period, OfferSide.BID, 1);
-        this.askBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 1);
-        this.lastTick = context.getHistory().getLastTick(instrument);
-        */
+        long prevBarTime = history.getPreviousBarStart(this.periodZL, history.getLastTick(Instrument.EURUSD).getTime());
+        List<IBar> barsOpenPeriod = history.getBars(Instrument.EURUSD, this.periodZL, OfferSide.BID, Filter.NO_FILTER, 100, prevBarTime, 0);
+        for(IBar bar : barsOpenPeriod) {
+            manageZeroLines(this.periodZL, bar);
+        }
 
         subscriptionInstrumentCheck(instrument);
 
@@ -95,6 +168,9 @@ public class NotNLA implements IStrategy {
                 }
             }
 
+            ZeroLine buyZL = findClosestZL(bidBar.getClose(), periodZL, IEngine.OrderCommand.BUY);
+            ZeroLine sellZL = findClosestZL(bidBar.getClose(), periodZL, IEngine.OrderCommand.SELL);
+
             //LONG
             if(checkBars(lastBar, askBar) == IEngine.OrderCommand.BUY) {
                 boolean trendMatch = true;
@@ -111,11 +187,11 @@ public class NotNLA implements IStrategy {
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
                 if(trendMatch) {
-                    takeProfit = price + instrument.getPipValue() * takeProfitMaxPips;
+                    takeProfit = buyZL.price - instrument.getPipValue() * takeProfitBeforeZLPips;
                     stopLoss = price - instrument.getPipValue() * stopLossPips;
                 }
                 else {
-                    takeProfit = price + instrument.getPipValue() * takeProfitMinPips;
+                    takeProfit = buyZL.price - instrument.getPipValue() * takeProfitBeforeZLPips;
                     stopLoss = price - instrument.getPipValue() * stopLossPips;
                 }
                 openOrder(instrument, IEngine.OrderCommand.BUY, lots, stopLossPips > 0 ? stopLoss : 0, takeProfit);
@@ -138,11 +214,11 @@ public class NotNLA implements IStrategy {
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
                 if(trendMatch) {
-                    takeProfit = price - instrument.getPipValue() * takeProfitMaxPips;
+                    takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
                 }
                 else {
-                    takeProfit = price - instrument.getPipValue() * takeProfitMinPips;
+                    takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
                 }
                 openOrder(instrument, IEngine.OrderCommand.SELL, lots, stopLossPips > 0 ? stopLoss : 0, takeProfit);
@@ -198,18 +274,45 @@ public class NotNLA implements IStrategy {
         return null;
     }
 
-    private IEngine.OrderCommand checkBarsSequence(IBar lastBar, IBar bar) throws JFException {
-        //LONG
-        if( getBarDirection(lastBar) == Direction.UP && getBarDirection(bar) == Direction.UP &&
-                bar.getClose() > (lastBar.getClose() + minDifferenceForSequence * instrument.getPipValue()) ) {
-            return IEngine.OrderCommand.BUY;
+    private void manageZeroLines(Period period, IBar bar) throws JFException {
+        IBar lastBar = getPreviousBar(period, bar);
+        ZeroLine.removeOldLines(zeroLines, bar, period);
+        double lastBarSize = getBarSizePips(lastBar);
+        double currentBarSize = getBarSizePips(bar);
+        if(currentBarSize > 2 * lastBarSize) {
+            if(getBarDirection(bar) == Direction.UP && lastBar.getHigh() < bar.getClose()) {
+                ZeroLine zl = new ZeroLine(lastBar.getHigh(), IEngine.OrderCommand.BUY, period, lastBar.getTime(), chart);
+                zeroLines.add(zl);
+                zl.render();
+            }
+            if(getBarDirection(bar) == Direction.DOWN && lastBar.getLow() > bar.getClose()) {
+                ZeroLine zl = new ZeroLine(lastBar.getLow(), IEngine.OrderCommand.SELL, period, lastBar.getTime(), chart);
+                zeroLines.add(zl);
+                zl.render();
+            }
         }
-        //SELL
-        if( getBarDirection(lastBar) == Direction.DOWN && getBarDirection(bar) == Direction.DOWN &&
-                bar.getClose() < (lastBar.getClose() - minDifferenceForSequence * instrument.getPipValue()) ) {
-            return IEngine.OrderCommand.SELL;
+    }
+
+    private ZeroLine findClosestZL(double price, Period period, IEngine.OrderCommand cmd) {
+        ZeroLine result = null;
+        for(ZeroLine zl : zeroLines) {
+            if(period != zl.period) continue;
+            if(cmd == IEngine.OrderCommand.BUY) {
+                if(zl.price > price && result == null) result = zl;
+                if(zl.price > price && zl.price < result.price) result = zl;
+            }
+            else if(cmd == IEngine.OrderCommand.SELL) {
+                if(zl.price < price && result == null) result = zl;
+                if(zl.price < price && zl.price > result.price) result = zl;
+            }
         }
-        return null;
+        return result;
+    }
+
+
+    private IBar getPreviousBar(Period period, IBar bar) throws JFException {
+        IBar lastBar = history.getBars(instrument, period, OfferSide.BID, bar.getTime() - period.getInterval(), bar.getTime()).get(0);
+        return lastBar;
     }
 
     private Direction getBarDirection(IBar bar) {
