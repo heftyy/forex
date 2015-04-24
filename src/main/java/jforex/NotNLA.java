@@ -96,9 +96,9 @@ public class NotNLA implements IStrategy {
     public Period periodZL = Period.FOUR_HOURS;
     @Configurable("TP before ZL")
     public int takeProfitBeforeZLPips = 12;
-    @Configurable("TP max [pips]")
+//    @Configurable("TP max [pips]")
     public int takeProfitMaxPips = 30;
-    @Configurable("TP min [pips]")
+//    @Configurable("TP min [pips]")
     public int takeProfitMinPips = 10;
     @Configurable("SL [pips]")
     public int stopLossPips = 20;
