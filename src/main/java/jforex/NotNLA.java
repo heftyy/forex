@@ -139,7 +139,7 @@ public class NotNLA implements IStrategy {
         this.zeroLines = new ArrayList<ZeroLine>();
 
         long prevBarTime = history.getPreviousBarStart(this.periodZL, history.getLastTick(Instrument.EURUSD).getTime());
-        List<IBar> barsOpenPeriod = history.getBars(Instrument.EURUSD, this.periodZL, OfferSide.BID, Filter.NO_FILTER, 100, prevBarTime, 0);
+        List<IBar> barsOpenPeriod = history.getBars(Instrument.EURUSD, this.periodZL, OfferSide.BID, Filter.NO_FILTER, 300, prevBarTime, 0);
         for(IBar bar : barsOpenPeriod) {
             manageZeroLines(this.periodZL, bar);
         }
