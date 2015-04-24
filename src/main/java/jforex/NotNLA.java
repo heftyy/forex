@@ -36,7 +36,7 @@ public class NotNLA implements IStrategy {
     public int stopLossPips = 20;
     @Configurable("Min bar size[pips]")
     public int minBarSize = 1;
-    @Configurable("Min difference for sequence bars [pips]")
+//    @Configurable("Min difference for sequence bars [pips]")
     public int minDifferenceForSequence = 5;
     @Configurable("Attempt close after profit[pips]")
     public int attemptCloseAfterProfit = 30;
