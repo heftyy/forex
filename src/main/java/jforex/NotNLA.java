@@ -157,6 +157,10 @@ public class NotNLA implements IStrategy {
     public void onTick(Instrument instrument, ITick tick) throws JFException { }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
+        if(this.period == periodZL) {
+            manageZeroLines(periodZL, bidBar);
+        }
+
         IBar lastBar = context.getHistory().getBar(instrument, period, OfferSide.ASK, 2);
 
         if (period == this.period && positionsTotal(instrument) == 0)  {
