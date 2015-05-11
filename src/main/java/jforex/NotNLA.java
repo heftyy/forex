@@ -2,16 +2,15 @@ package main.java.jforex;
 
 import com.dukascopy.api.*;
 import com.dukascopy.api.drawings.IChartObjectFactory;
-import com.dukascopy.api.drawings.IPriceMarkerChartObject;
 import com.dukascopy.api.drawings.IShortLineChartObject;
 import org.joda.time.DateTime;
 
 import java.awt.*;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 @Library("/home/heftyy/JForex/Strategies/libs/joda-time-2.3.jar")
 public class NotNLA implements IStrategy {
@@ -120,8 +119,8 @@ public class NotNLA implements IStrategy {
     public int attemptCloseAfterProfit = 30;
     @Configurable("Trailing step[pips]")
     public int trailingStep = 1;
-    @Configurable("Trailing stop[pips]")
-    public int trailingStop = 10;
+    @Configurable("Trailing stop trigger[pips]")
+    public int trailingStopTrigger = 10;
     @Configurable("Draw SL levels on chart")
     public boolean drawSl = true;
     @Configurable("")
@@ -174,7 +173,11 @@ public class NotNLA implements IStrategy {
     }
 
     public void onTick(Instrument instrument, ITick tick) throws JFException {
-        trailingStop(tick);
+        if (stopLossPips > 0) {
+            for(IOrder order : engine.getOrders()) {
+                updateTrailingStopLoss(order, tick, trailingStopTrigger, trailingStep);
+            }
+        }
     }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
@@ -272,59 +275,43 @@ public class NotNLA implements IStrategy {
         }
     }
 
-    private void trailingStop(ITick tick) throws JFException {
-        //add trailing stops
-        for (IOrder order : engine.getOrders(instrument)) {
-            if (!(order.getState() == IOrder.State.FILLED && Double.compare(order.getRequestedAmount(), order.getAmount()) == 0) // instrument's position
-                    || (slPrices.get(order) == null)) {
-                continue;
-            }
-            double prevSl = slPrices.get(order) == null ? 0 : slPrices.get(order);
-            double marketPrice = order.isLong() ? tick.getBid() : tick.getAsk();
-            int sign = order.isLong() ? +1 : -1;
-            double slInPips = Math.abs(marketPrice - prevSl) / instrument.getPipValue();
-            if (slInPips > trailingStop + trailingStep) {
-                double newSl = marketPrice - (sign * trailingStop * instrument.getPipValue());
-                slPrices.put(order, newSl);
-                print("%s of %s moved SL %.5f -> %.5f", order.getLabel(), order.getInstrument(), prevSl, newSl);
-                if(drawSl){
-                    for(IChart chart : context.getCharts(instrument)){
-                        IPriceMarkerChartObject line = chart.getChartObjectFactory().createPriceMarker(order.getId(), newSl);
-                        line.setText("SL for " + order.getId());
-                        line.setColor(Color.GRAY);
-                        line.setLineStyle(LineStyle.FINE_DASHED);
-                        chart.add(line);
+    public void updateTrailingStopLoss(IOrder order, ITick tick, double trailingStopTrigger, double trailingStopStep) throws JFException {
+
+        if (order != null && order.getState() == IOrder.State.FILLED) {
+
+            Instrument instr = order.getInstrument();
+
+            double newStop;
+            double openPrice = order.getOpenPrice();
+            double currentStopLoss = order.getStopLossPrice();
+
+            // (START) trailing stop loss is activated when price is higher than oper price + trailingTrigger pips
+            // (TRAILING STOP) if price moves further up (for BUY order), stop loss is updated to stopLossPips
+
+            if (order.isLong()) { // long side order
+                if ((currentStopLoss == 0.0 || tick.getBid() > currentStopLoss + pip(trailingStopStep, instr))
+                        && tick.getBid() > openPrice + pip(trailingStopTrigger, instr)) {
+                    // trailing stop loss
+                    newStop = tick.getBid() - pip(trailingStopStep, instr);
+                    newStop = round(newStop, instr);
+
+                    if (currentStopLoss != newStop) {
+                        order.setStopLossPrice(newStop);
+                        return;
                     }
                 }
-            }
-        }
 
-        //check if SL levels are reached
-        Iterator<Map.Entry<IOrder, Double>> entries = slPrices.entrySet().iterator();
-        while (entries.hasNext()) {
-            Map.Entry<IOrder, Double> entry = entries.next();
-            IOrder order = entry.getKey();
-            double slPrice = entry.getValue();
-            if(order.getInstrument() != instrument){
-                continue;
-            }
+            } else { // short side order
+                if ((currentStopLoss == 0.0 || tick.getAsk() < currentStopLoss - pip(trailingStopStep, instr))
+                        && tick.getAsk() < openPrice - pip(trailingStopTrigger, instr)) {
 
-            double marketPrice = order.isLong() ? tick.getBid() : tick.getAsk();
-            if ((order.isLong() && slPrice >= marketPrice) || (!order.isLong() && slPrice <= marketPrice)) {
-                print("%s of %s breached SL level of %.5f (last %s=%.5f), closing position",
-                        order.getLabel(),
-                        order.getInstrument(),
-                        slPrice,
-                        order.isLong() ? "BID" : "ASK",
-                        marketPrice
-                );
-                order.close();
-                order.waitForUpdate(2000, TimeUnit.MILLISECONDS);
-                //engine.submitOrder("OppDirOrder_"+System.currentTimeMillis(), instrument, order.isLong() ? IEngine.OrderCommand.SELL : IEngine.OrderCommand.BUY, order.getAmount());
-                entries.remove();
-                if(drawSl){
-                    for(IChart chart : context.getCharts(instrument)){
-                        chart.remove(order.getId());
+                    // trailing stop loss
+                    newStop = tick.getAsk() + pip(trailingStopStep, instr);
+                    newStop = round(newStop, instr);
+
+                    if (currentStopLoss != newStop) {
+                        order.setStopLossPrice(newStop);
+                        return;
                     }
                 }
             }
@@ -450,7 +437,7 @@ public class NotNLA implements IStrategy {
     }
 
     protected void setTakeProfit(Instrument instrument, double takeProfit) throws JFException {
-        takeProfit = round(takeProfit, 5);
+        takeProfit = round(takeProfit, instrument);
         for (IOrder order : engine.getOrders(instrument)) {
             if (order.getState() == IOrder.State.FILLED) {
                 if (takeProfit != 0.0d && takeProfit != order.getTakeProfitPrice()) {
@@ -461,7 +448,7 @@ public class NotNLA implements IStrategy {
     }
 
     protected void setStopLoss(Instrument instrument, double stopLoss) throws JFException {
-        stopLoss = round(stopLoss, 5);
+        stopLoss = round(stopLoss, instrument);
         for (IOrder order : engine.getOrders(instrument)) {
             if (order.getState() == IOrder.State.FILLED) {
                 if (stopLoss != 0.0d && stopLoss != order.getStopLossPrice()) {
@@ -517,17 +504,19 @@ public class NotNLA implements IStrategy {
             }
         }
         if ( lot != 0.0d ) {
-            profit = round(profit/ lot, precision);
+            profit = round(profit/ lot, instrument);
         }
         return profit;
     }
 
-    private static double roundToPippette(double amount, Instrument instrument) {
-        return round(amount, instrument.getPipScale() + 1);
+    private double round(double price, Instrument instr) {
+        BigDecimal bd = new BigDecimal(price);
+        bd = bd.setScale(instr.getPipScale() + 1, RoundingMode.HALF_UP);
+        return bd.doubleValue();
     }
 
-    private static double round(double amount, int decimalPlaces) {
-        return (new BigDecimal(amount)).setScale(decimalPlaces, BigDecimal.ROUND_HALF_UP).doubleValue();
+    private double pip(double pips, Instrument instr) {
+        return pips * instr.getPipValue();
     }
 
     protected void print(String msg) {
