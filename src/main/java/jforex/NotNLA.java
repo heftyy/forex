@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Library("/home/heftyy/JForex/Strategies/libs/joda-time-2.3.jar")
 public class NotNLA implements IStrategy {
@@ -310,14 +311,16 @@ public class NotNLA implements IStrategy {
 
             double marketPrice = order.isLong() ? tick.getBid() : tick.getAsk();
             if ((order.isLong() && slPrice >= marketPrice) || (!order.isLong() && slPrice <= marketPrice)) {
-                print("%s of %s breached SL level of %.5f (last %s=%.5f), creating an oposite direction Market order to close the position",
+                print("%s of %s breached SL level of %.5f (last %s=%.5f), closing position",
                         order.getLabel(),
                         order.getInstrument(),
                         slPrice,
                         order.isLong() ? "BID" : "ASK",
                         marketPrice
                 );
-                engine.submitOrder("OppDirOrder_"+System.currentTimeMillis(), instrument, order.isLong() ? IEngine.OrderCommand.SELL : IEngine.OrderCommand.BUY, order.getAmount());
+                order.close();
+                order.waitForUpdate(2000, TimeUnit.MILLISECONDS);
+                //engine.submitOrder("OppDirOrder_"+System.currentTimeMillis(), instrument, order.isLong() ? IEngine.OrderCommand.SELL : IEngine.OrderCommand.BUY, order.getAmount());
                 entries.remove();
                 if(drawSl){
                     for(IChart chart : context.getCharts(instrument)){
