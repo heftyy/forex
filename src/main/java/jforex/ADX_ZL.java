@@ -177,7 +177,7 @@ public class ADX_ZL implements IStrategy {
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
         if(period == this.periodOpen) {
-//            manageZeroLines(periodOpen, bidBar);
+            manageZeroLines(periodOpen, bidBar);
 
             DateTime now = new DateTime(bidBar.getTime());
             if(now.getHourOfDay() < openTimeStart.getHourOfDay()) return;

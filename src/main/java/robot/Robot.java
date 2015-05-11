@@ -1,4 +1,3 @@
-package main.java.robot;
 /*
  * Copyright (c) 2009 Dukascopy (Suisse) SA. All Rights Reserved.
  * 
@@ -28,18 +27,19 @@ package main.java.robot;
  * OF LIABILITY, ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, 
  * EVEN IF DUKASCOPY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
+package main.java.robot;
 
-
-import com.dukascopy.api.Instrument;
-import com.dukascopy.api.system.ClientFactory;
-import com.dukascopy.api.system.IClient;
 import com.dukascopy.api.system.ISystemListener;
-import main.java.jforex.pyramid.version0_2.PyramidStrategy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.dukascopy.api.system.IClient;
+import com.dukascopy.api.system.ClientFactory;
+import com.dukascopy.api.Instrument;
 
 import java.util.HashSet;
 import java.util.Set;
+
+import main.java.jforex.NotNLA;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 
 /**
  * This small program demonstrates how to initialize Dukascopy client and start a strategy
@@ -50,9 +50,9 @@ public class Robot {
     //url of the DEMO jnlp
     private static String jnlpUrl = "https://www.dukascopy.com/client/demo/jclient/jforex.jnlp";
     //user name
-    private static String userName = "krism";
+    private static String userName = "username";
     //password
-    private static String password = "12DukaS12";
+    private static String password = "password";
 
     public static void main(String[] args) throws Exception {
         //get the instance of the IClient interface
@@ -61,30 +61,31 @@ public class Robot {
         client.setSystemListener(new ISystemListener() {
             private int lightReconnects = 3;
 
-        	@Override
-        	public void onStart(long processId) {
+            @Override
+            public void onStart(long processId) {
                 LOGGER.info("Strategy started: " + processId);
-        	}
+            }
 
-			@Override
-			public void onStop(long processId) {
+            @Override
+            public void onStop(long processId) {
                 LOGGER.info("Strategy stopped: " + processId);
                 if (client.getStartedStrategies().size() == 0) {
                     System.exit(0);
                 }
-			}
+            }
 
-			@Override
-			public void onConnect() {
+            @Override
+            public void onConnect() {
                 LOGGER.info("Connected");
                 lightReconnects = 3;
-			}
+            }
 
-			@Override
-			public void onDisconnect() {
+            @Override
+            public void onDisconnect() {
                 LOGGER.warn("Disconnected");
                 if (lightReconnects > 0) {
                     client.reconnect();
+                    --lightReconnects;
                 } else {
                     try {
                         //sleep for 10 seconds before attempting to reconnect
@@ -98,8 +99,8 @@ public class Robot {
                         LOGGER.error(e.getMessage(), e);
                     }
                 }
-			}
-		});
+            }
+        });
 
         LOGGER.info("Connecting...");
         //connect to the server using jnlp, user name and password
@@ -117,17 +118,14 @@ public class Robot {
         }
 
         //subscribe to the instruments
-        Set<Instrument> instruments = new HashSet<Instrument>();
+        Set<Instrument> instruments = new HashSet<>();
         instruments.add(Instrument.EURUSD);
         LOGGER.info("Subscribing instruments...");
         client.setSubscribedInstruments(instruments);
-        
-        //workaround for LoadNumberOfCandlesAction for JForex-API versions > 2.6.64
-        Thread.sleep(5000);
-        
+
         //start the strategy
         LOGGER.info("Starting strategy");
-        client.startStrategy(new PyramidStrategy());
+        client.startStrategy(new NotNLA());
         //now it's running
     }
 }

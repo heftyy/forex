@@ -29,23 +29,9 @@
  */
 package main.java.robot;
 
-import com.dukascopy.api.*;
-import com.dukascopy.api.feed.FeedDescriptor;
-import com.dukascopy.api.feed.IFeedDescriptor;
-import com.dukascopy.api.system.ISystemListener;
-import com.dukascopy.api.system.ITesterClient;
-import com.dukascopy.api.system.TesterFactory;
-import com.dukascopy.api.system.tester.*;
-import main.java.jforex.CrazyHedge;
-import main.java.jforex.NotNLA;
-import org.joda.time.DateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.swing.*;
-import java.awt.*;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
@@ -53,6 +39,41 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
+
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
+import main.java.jforex.NotNLA;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.dukascopy.api.DataType;
+import com.dukascopy.api.Filter;
+import com.dukascopy.api.IChart;
+import com.dukascopy.api.Instrument;
+import com.dukascopy.api.LoadingProgressListener;
+import com.dukascopy.api.OfferSide;
+import com.dukascopy.api.Period;
+import com.dukascopy.api.PriceRange;
+import com.dukascopy.api.ReversalAmount;
+import com.dukascopy.api.TickBarSize;
+import com.dukascopy.api.feed.FeedDescriptor;
+import com.dukascopy.api.feed.IFeedDescriptor;
+import com.dukascopy.api.system.ISystemListener;
+import com.dukascopy.api.system.ITesterClient;
+import com.dukascopy.api.system.TesterFactory;
+import com.dukascopy.api.system.tester.ITesterChartController;
+import com.dukascopy.api.system.tester.ITesterExecution;
+import com.dukascopy.api.system.tester.ITesterExecutionControl;
+import com.dukascopy.api.system.tester.ITesterGui;
+import com.dukascopy.api.system.tester.ITesterUserInterface;
 
 import static com.dukascopy.api.DataType.*;
 import static com.dukascopy.api.Instrument.*;
@@ -67,8 +88,8 @@ import static com.dukascopy.api.TickBarSize.*;
 public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, ITesterExecution {
     private static final Logger LOGGER = LoggerFactory.getLogger(GUIModeChartTypes.class);
 
-    private final int frameWidth = 600;
-    private final int frameHeight = 400;
+    private final int frameWidth = 1000;
+    private final int frameHeight = 600;
     private final int controlPanelHeight = 40;
 
     private JPanel currentChartPanel = null;
@@ -145,7 +166,7 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
                 LOGGER.info("Strategy stopped: " + processId);
                 resetButtons();
 
-                File reportFile = new File("report.html");
+                File reportFile = new File("C:\\report.html");
                 try {
                     client.createReport(processId, reportFile);
                 } catch (Exception e) {
@@ -166,6 +187,14 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
                 //tester doesn't disconnect
             }
         });
+
+        DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm");
+        DateTime from = DateTime.parse("2015-05-02 00:00", dtf);
+        DateTime to =   DateTime.parse("2015-05-04 20:00", dtf);
+
+        client.setDataInterval(Period.TICK, OfferSide.BID,
+                ITesterClient.InterpolationMethod.OPEN_TICK,
+                from.getMillis(), to.getMillis());
 
         LOGGER.info("Connecting...");
         //connect to the server using jnlp, user name and password
@@ -191,37 +220,6 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
         client.setSubscribedInstruments(instruments);
         //setting initial deposit
         client.setInitialDeposit(Instrument.EURUSD.getSecondaryCurrency(), 50000);
-
-        DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm");
-        DateTime from = DateTime.parse("2015-04-08 04:00", dtf);
-        DateTime to =   DateTime.parse("2015-04-21 12:00", dtf);
-
-        client.setDataInterval(Period.ONE_MIN, OfferSide.BID,
-                ITesterClient.InterpolationMethod.FOUR_TICKS,
-                from.getMillis(), to.getMillis());
-
-        /*
-        Calendar fromDate = new GregorianCalendar();
-        Calendar toDate = new GregorianCalendar();
-        fromDate.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-        fromDate.set(2014, // year
-                3, // month
-                10, // day
-                1, // hour
-                0); // min
-        toDate.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-        toDate.set(2014, // year
-                3, // month
-                15, // day
-                20, // hour
-                0); // min
-
-        client.setDataInterval(Period.FIFTEEN_MINS, OfferSide.BID,
-                ITesterClient.InterpolationMethod.FOUR_TICKS,
-                fromDate.getTimeInMillis(), toDate.getTimeInMillis());
-
-        */
-
         //load data
         LOGGER.info("Downloading data");
         Future<?> future = client.downloadData(null);
@@ -308,7 +306,7 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
             comboBoxInstrument = setupComboBox(new Instrument [] {EURUSD, USDJPY, USDCAD}, "Instrument", EURUSD);
             comboBoxOfferSide = setupComboBox(OfferSide.values(), "Offer Side", OfferSide.BID);
             comboBoxFilter = setupComboBox(Filter.values(), "Filter", Filter.NO_FILTER);
-            comboBoxPeriod = setupComboBox(Period.values(), "Period", Period.ONE_HOUR);
+            comboBoxPeriod = setupComboBox(Period.values(), "Period", Period.TEN_MINS);
             comboBoxPriceRange = setupComboBox(new PriceRange [] {ONE_PIP, TWO_PIPS, THREE_PIPS, FOUR_PIPS, FIVE_PIPS, SIX_PIPS}, "Price Range", TWO_PIPS);
             comboBoxReversalAmount = setupComboBox(new ReversalAmount [] {ReversalAmount.ONE, ReversalAmount.TWO, ReversalAmount.THREE}, "Reversal Amount", ReversalAmount.TWO);
             comboBoxTickBarSize = setupComboBox(new TickBarSize [] {TWO, THREE, FOUR, FIVE}, "Tick Bar Size", THREE);
@@ -397,12 +395,12 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
         int screenHeight = screenSize.height;
         int screenWidth = screenSize.width;
         setSize(screenWidth / 4, screenHeight / 2);
-        setLocation(screenWidth / 8, screenHeight / 4);
+        setLocation(200, screenHeight / 4);
     }
 
     /**
      * Add chart panel to the frame
-     * @param panel
+     * @param chartPanel panel
      */
     private void addChartPanel(JPanel chartPanel){
         removecurrentChartPanel();

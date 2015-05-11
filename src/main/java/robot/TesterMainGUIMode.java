@@ -1,6 +1,59 @@
+/*
+ * Copyright (c) 2009 Dukascopy (Suisse) SA. All Rights Reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * -Redistribution of source code must retain the above copyright notice, this
+ *  list of conditions and the following disclaimer.
+ *
+ * -Redistribution in binary form must reproduce the above copyright notice,
+ *  this list of conditions and the following disclaimer in the documentation
+ *  and/or other materials provided with the distribution.
+ * 
+ * Neither the name of Dukascopy (Suisse) SA or the names of contributors may
+ * be used to endorse or promote products derived from this software without
+ * specific prior written permission.
+ *
+ * This software is provided "AS IS," without a warranty of any kind. ALL
+ * EXPRESS OR IMPLIED CONDITIONS, REPRESENTATIONS AND WARRANTIES, INCLUDING
+ * ANY IMPLIED WARRANTY OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+ * OR NON-INFRINGEMENT, ARE HEREBY EXCLUDED. DUKASCOPY (SUISSE) SA ("DUKASCOPY")
+ * AND ITS LICENSORS SHALL NOT BE LIABLE FOR ANY DAMAGES SUFFERED BY LICENSEE
+ * AS A RESULT OF USING, MODIFYING OR DISTRIBUTING THIS SOFTWARE OR ITS
+ * DERIVATIVES. IN NO EVENT WILL DUKASCOPY OR ITS LICENSORS BE LIABLE FOR ANY LOST
+ * REVENUE, PROFIT OR DATA, OR FOR DIRECT, INDIRECT, SPECIAL, CONSEQUENTIAL,
+ * INCIDENTAL OR PUNITIVE DAMAGES, HOWEVER CAUSED AND REGARDLESS OF THE THEORY
+ * OF LIABILITY, ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE,
+ * EVEN IF DUKASCOPY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+ */
 package main.java.robot;
 
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Future;
+
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
 import com.dukascopy.api.*;
+import main.java.jforex.NotNLA;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.dukascopy.api.system.ISystemListener;
 import com.dukascopy.api.system.ITesterClient;
 import com.dukascopy.api.system.TesterFactory;
@@ -8,27 +61,13 @@ import com.dukascopy.api.system.tester.ITesterExecution;
 import com.dukascopy.api.system.tester.ITesterExecutionControl;
 import com.dukascopy.api.system.tester.ITesterGui;
 import com.dukascopy.api.system.tester.ITesterUserInterface;
-import main.java.jforex.CrazyHedge;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.File;
-import java.util.*;
-import java.util.concurrent.Future;
 
 /**
- * This small program demonstrates how to initialize Dukascopy tester and start
- * a strategy in GUI mode
+ * This small program demonstrates how to initialize Dukascopy tester and start a strategy in GUI mode
  */
 @SuppressWarnings("serial")
-public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
-		ITesterExecution {
-	private static final Logger LOGGER = LoggerFactory
-			.getLogger(TesterMainGUIMode.class);
+public class TesterMainGUIMode extends JFrame implements ITesterUserInterface, ITesterExecution {
+	private static final Logger LOGGER = LoggerFactory.getLogger(TesterMainGUIMode.class);
 
 	private final int frameWidth = 1000;
 	private final int frameHeight = 600;
@@ -43,30 +82,30 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 	private JButton continueButton = null;
 	private JButton cancelButton = null;
 
-	// url of the DEMO jnlp
+	//url of the DEMO jnlp
 	private static String jnlpUrl = "https://www.dukascopy.com/client/demo/jclient/jforex.jnlp";
-	// user name
-	private static String userName = "DEMO10037oNNcAEU";
-	// password
-	private static String password = "oNNcA";
+	//user name
+	private static String userName = "DEMO2FSehY";
+	//password
+	private static String password = "FSehY";
 
-	public TesterMainGUIMode() {
+	private Instrument instrument = Instrument.EURUSD;
+
+	public TesterMainGUIMode(){
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		getContentPane().setLayout(
-				new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
+		getContentPane().setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
 	}
 
 	@Override
 	public void setChartPanels(Map<IChart, ITesterGui> chartPanels) {
-		if (chartPanels != null && chartPanels.size() > 0) {
-
-			IChart chart = chartPanels.keySet().iterator().next();
-			Instrument instrument = chart.getInstrument();
-			setTitle(instrument.toString() + " " + chart.getSelectedOfferSide()
-					+ " " + chart.getSelectedPeriod());
-
-			JPanel chartPanel = chartPanels.get(chart).getChartPanel();
-			addChartPanel(chartPanel);
+		for(Map.Entry<IChart, ITesterGui> entry : chartPanels.entrySet()){
+			IChart chart = entry.getKey();
+			JPanel chartPanel = entry.getValue().getChartPanel();
+			if(chart.getFeedDescriptor().getInstrument().equals(instrument)){
+				setTitle(chart.getFeedDescriptor().toString());
+				addChartPanel(chartPanel);
+				break;
+			}
 		}
 	}
 
@@ -76,10 +115,9 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 	}
 
 	public void startStrategy() throws Exception {
-		// get the instance of the IClient interface
-
+		//get the instance of the IClient interface
 		final ITesterClient client = TesterFactory.getDefaultInstance();
-		// set the listener that will receive system events
+		//set the listener that will receive system events
 		client.setSystemListener(new ISystemListener() {
 			@Override
 			public void onStart(long processId) {
@@ -92,14 +130,14 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 				LOGGER.info("Strategy stopped: " + processId);
 				resetButtons();
 
-				File reportFile = new File("report.html");
+				File reportFile = new File("C:\\report.html");
 				try {
 					client.createReport(processId, reportFile);
 				} catch (Exception e) {
 					LOGGER.error(e.getMessage(), e);
 				}
 				if (client.getStartedStrategies().size() == 0) {
-					// Do nothing
+					//Do nothing
 				}
 			}
 
@@ -110,17 +148,25 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 
 			@Override
 			public void onDisconnect() {
-				// tester doesn't disconnect
+				//tester doesn't disconnect
 			}
 		});
 
+		DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm");
+		DateTime from = DateTime.parse("2015-04-08 04:00", dtf);
+		DateTime to =   DateTime.parse("2015-04-21 12:00", dtf);
+
+		client.setDataInterval(Period.TICK, OfferSide.BID,
+				ITesterClient.InterpolationMethod.OPEN_TICK,
+				from.getMillis(), to.getMillis());
+
 		LOGGER.info("Connecting...");
-		// connect to the server using jnlp, user name and password
-		// connection is needed for data downloading
+		//connect to the server using jnlp, user name and password
+		//connection is needed for data downloading
 		client.connect(jnlpUrl, userName, password);
 
-		// wait for it to connect
-		int i = 10; // wait max ten seconds
+		//wait for it to connect
+		int i = 10; //wait max ten seconds
 		while (i > 0 && !client.isConnected()) {
 			Thread.sleep(1000);
 			i--;
@@ -130,106 +176,80 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 			System.exit(1);
 		}
 
-		// set instruments that will be used in testing
-		final Set<Instrument> instruments = new HashSet<Instrument>();
-		instruments.add(Instrument.EURUSD);
+		//set instruments that will be used in testing
+		final Set<Instrument> instruments = new HashSet<>();
+		instruments.add(instrument);
 
 		LOGGER.info("Subscribing instruments...");
 		client.setSubscribedInstruments(instruments);
-		// setting initial deposit
-		client.setInitialDeposit(Instrument.EURUSD.getSecondaryCurrency(),
-				50000);
-
-		Calendar fromDate = new GregorianCalendar();
-		Calendar toDate = new GregorianCalendar();
-		fromDate.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-		fromDate.set(2014, // year
-				3, // month
-				10, // day
-				1, // hour
-				0); // min
-		toDate.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-		toDate.set(2014, // year
-				3, // month
-				15, // day
-				20, // hour
-				0); // min
-
-		client.setDataInterval(Period.FIFTEEN_MINS, OfferSide.BID,
-				ITesterClient.InterpolationMethod.FOUR_TICKS,
-				fromDate.getTimeInMillis(), toDate.getTimeInMillis());
-		// load data
+		//setting initial deposit
+		client.setInitialDeposit(Instrument.EURUSD.getSecondaryJFCurrency(), 50000);
+		//load data
 		LOGGER.info("Downloading data");
 		Future<?> future = client.downloadData(null);
-		// wait for downloading to complete
+		//wait for downloading to complete
 		future.get();
-		// start the strategy
+		//start the strategy
 		LOGGER.info("Starting strategy");
 
-		// workaround for LoadNumberOfCandlesAction for JForex-API versions >
-		// 2.6.64
-		Thread.sleep(5000);
+		client.startStrategy(
+				new NotNLA(),
+				new LoadingProgressListener() {
+					@Override
+					public void dataLoaded(long startTime, long endTime, long currentTime, String information) {
+						LOGGER.info(information);
+					}
 
-		client.startStrategy(new CrazyHedge(), new LoadingProgressListener() {
-			@Override
-			public void dataLoaded(long startTime, long endTime,
-					long currentTime, String information) {
-				LOGGER.info(information);
-			}
+					@Override
+					public void loadingFinished(boolean allDataLoaded, long startTime, long endTime, long currentTime) {
+					}
 
-			@Override
-			public void loadingFinished(boolean allDataLoaded, long startTime,
-					long endTime, long currentTime) {
-			}
-
-			@Override
-			public boolean stopJob() {
-				return false;
-			}
-		}, this, this);
-		// now it's running
+					@Override
+					public boolean stopJob() {
+						return false;
+					}
+				}, this, this
+		);
+		//now it's running
 	}
 
 	/**
-	 * Center a frame on the screen
+	 * Center a frame on the screen 
 	 */
-	private void centerFrame() {
+	private void centerFrame(){
 		Toolkit tk = Toolkit.getDefaultToolkit();
 		Dimension screenSize = tk.getScreenSize();
 		int screenHeight = screenSize.height;
 		int screenWidth = screenSize.width;
-		setSize(screenWidth / 3, screenHeight / 2);
-		setLocation(screenWidth / 4, screenHeight / 4);
+		setSize(screenWidth / 4, screenHeight / 2);
+		setLocation(100, screenHeight / 4);
 	}
 
+	/**
+	 * Add chart panel to the frame
+	 */
 	private void addChartPanel(JPanel chartPanel) {
 		removecurrentChartPanel();
 
 		this.currentChartPanel = chartPanel;
-		chartPanel.setPreferredSize(new Dimension(frameWidth, frameHeight
-				- controlPanelHeight));
+		chartPanel.setPreferredSize(new Dimension(frameWidth, frameHeight - controlPanelHeight));
 		chartPanel.setMinimumSize(new Dimension(frameWidth, 200));
-		chartPanel.setMaximumSize(new Dimension(Short.MAX_VALUE,
-				Short.MAX_VALUE));
+		chartPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, Short.MAX_VALUE));
 		getContentPane().add(chartPanel);
 		this.validate();
 		chartPanel.repaint();
 	}
 
 	/**
-	 * Add buttons to start/pause/continue/cancel actions
+	 * Add buttons to start/pause/continue/cancel actions 
 	 */
 	private void addControlPanel() {
-
 		controlPanel = new JPanel();
 		FlowLayout flowLayout = new FlowLayout(FlowLayout.LEFT);
 		controlPanel.setLayout(flowLayout);
-		controlPanel.setPreferredSize(new Dimension(frameWidth,
-				controlPanelHeight));
-		controlPanel.setMinimumSize(new Dimension(frameWidth,
-				controlPanelHeight));
-		controlPanel.setMaximumSize(new Dimension(Short.MAX_VALUE,
-				controlPanelHeight));
+		controlPanel.setPreferredSize(new Dimension(frameWidth, controlPanelHeight));
+		controlPanel.setMinimumSize(new Dimension(frameWidth, controlPanelHeight));
+		controlPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, controlPanelHeight));
 
 		startStrategyButton = new JButton("Start strategy");
 		startStrategyButton.addActionListener(new ActionListener() {
@@ -256,7 +276,7 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 		pauseButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				if (executionControl != null) {
+				if(executionControl != null){
 					executionControl.pauseExecution();
 					updateButtons();
 				}
@@ -267,7 +287,7 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 		continueButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				if (executionControl != null) {
+				if(executionControl != null){
 					executionControl.continueExecution();
 					updateButtons();
 				}
@@ -278,7 +298,7 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 		cancelButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				if (executionControl != null) {
+				if(executionControl != null){
 					executionControl.cancelExecution();
 					updateButtons();
 				}
@@ -296,32 +316,29 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 		cancelButton.setEnabled(false);
 	}
 
-	private void updateButtons() {
-		if (executionControl != null) {
-			startStrategyButton.setEnabled(executionControl
-					.isExecutionCanceled());
-			pauseButton.setEnabled(!executionControl.isExecutionPaused()
-					&& !executionControl.isExecutionCanceled());
+	private void updateButtons(){
+		if(executionControl != null){
+			startStrategyButton.setEnabled(executionControl.isExecutionCanceled());
+			pauseButton.setEnabled(!executionControl.isExecutionPaused() && !executionControl.isExecutionCanceled());
 			cancelButton.setEnabled(!executionControl.isExecutionCanceled());
 			continueButton.setEnabled(executionControl.isExecutionPaused());
 		}
 	}
 
-	private void resetButtons() {
+	private void resetButtons(){
 		startStrategyButton.setEnabled(true);
 		pauseButton.setEnabled(false);
 		continueButton.setEnabled(false);
 		cancelButton.setEnabled(false);
 	}
 
-	private void removecurrentChartPanel() {
-		if (this.currentChartPanel != null) {
+	private void removecurrentChartPanel(){
+		if(this.currentChartPanel != null){
 			try {
 				SwingUtilities.invokeAndWait(new Runnable() {
 					@Override
 					public void run() {
-						TesterMainGUIMode.this.getContentPane().remove(
-								TesterMainGUIMode.this.currentChartPanel);
+						TesterMainGUIMode.this.getContentPane().remove(TesterMainGUIMode.this.currentChartPanel);
 						TesterMainGUIMode.this.getContentPane().repaint();
 					}
 				});
@@ -331,7 +348,7 @@ public class TesterMainGUIMode extends JFrame implements ITesterUserInterface,
 		}
 	}
 
-	public void showChartFrame() {
+	public void showChartFrame(){
 		setSize(frameWidth, frameHeight);
 		centerFrame();
 		addControlPanel();

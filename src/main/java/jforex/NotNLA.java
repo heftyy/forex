@@ -96,9 +96,9 @@ public class NotNLA implements IStrategy {
     public Period periodZL = Period.FOUR_HOURS;
     @Configurable("TP before ZL")
     public int takeProfitBeforeZLPips = 12;
-//    @Configurable("TP max [pips]")
+    @Configurable("TP max [pips]")
     public int takeProfitMaxPips = 30;
-//    @Configurable("TP min [pips]")
+    @Configurable("TP min [pips]")
     public int takeProfitMinPips = 10;
     @Configurable("SL [pips]")
     public int stopLossPips = 20;
@@ -136,11 +136,12 @@ public class NotNLA implements IStrategy {
         this.history = context.getHistory();
         this.console = context.getConsole();
         this.chart = context.getChart(Instrument.EURUSD);
-        this.zeroLines = new ArrayList<ZeroLine>();
+        this.zeroLines = new ArrayList<>();
 
         long prevBarTime = history.getPreviousBarStart(this.periodZL, history.getLastTick(Instrument.EURUSD).getTime());
-        List<IBar> barsOpenPeriod = history.getBars(Instrument.EURUSD, this.periodZL, OfferSide.BID, Filter.NO_FILTER, 300, prevBarTime, 0);
-        for(IBar bar : barsOpenPeriod) {
+        List<IBar> bars = history.getBars(instrument, this.periodZL, OfferSide.BID, history.getTimeForNBarsBack(periodZL, prevBarTime, 300), prevBarTime);
+
+        for(IBar bar : bars) {
             manageZeroLines(this.periodZL, bar);
         }
 
@@ -157,7 +158,8 @@ public class NotNLA implements IStrategy {
     public void onTick(Instrument instrument, ITick tick) throws JFException { }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
-        if(this.period == periodZL) {
+
+        if(period.equals(periodZL)) {
             manageZeroLines(periodZL, bidBar);
         }
 
@@ -191,11 +193,19 @@ public class NotNLA implements IStrategy {
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
                 if(trendMatch) {
-                    takeProfit = buyZL.price - instrument.getPipValue() * takeProfitBeforeZLPips;
+                    if(buyZL != null)
+                        takeProfit = buyZL.price - instrument.getPipValue() * takeProfitBeforeZLPips;
+                    else
+                        takeProfit = askBar.getClose() + instrument.getPipValue() * takeProfitMaxPips;
+
                     stopLoss = price - instrument.getPipValue() * stopLossPips;
                 }
                 else {
-                    takeProfit = buyZL.price - instrument.getPipValue() * takeProfitBeforeZLPips;
+                    if(buyZL != null)
+                        takeProfit = buyZL.price - instrument.getPipValue() * takeProfitBeforeZLPips;
+                    else
+                        takeProfit = askBar.getClose() + instrument.getPipValue() * takeProfitMinPips;
+
                     stopLoss = price - instrument.getPipValue() * stopLossPips;
                 }
                 openOrder(instrument, IEngine.OrderCommand.BUY, lots, stopLossPips > 0 ? stopLoss : 0, takeProfit);
@@ -218,11 +228,19 @@ public class NotNLA implements IStrategy {
                 double takeProfit, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
                 if(trendMatch) {
-                    takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
+                    if(sellZL != null)
+                        takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
+                    else
+                        takeProfit = bidBar.getClose() - instrument.getPipValue() * takeProfitMaxPips;
+
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
                 }
                 else {
-                    takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
+                    if(sellZL != null)
+                        takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
+                    else
+                        takeProfit = bidBar.getClose() - instrument.getPipValue() * takeProfitMinPips;
+
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
                 }
                 openOrder(instrument, IEngine.OrderCommand.SELL, lots, stopLossPips > 0 ? stopLoss : 0, takeProfit);
@@ -294,12 +312,16 @@ public class NotNLA implements IStrategy {
             if(getBarDirection(bar) == Direction.UP && lastBar.getHigh() < bar.getClose()) {
                 ZeroLine zl = new ZeroLine(lastBar.getHigh(), IEngine.OrderCommand.BUY, period, lastBar.getTime(), chart);
                 print(zl.toString());
+                print(String.format("bar [%f][%f] (%s)", bar.getOpen(), bar.getClose(), new DateTime(bar.getTime())));
+                print("");
                 zeroLines.add(zl);
                 zl.render();
             }
             if(getBarDirection(bar) == Direction.DOWN && lastBar.getLow() > bar.getClose()) {
                 ZeroLine zl = new ZeroLine(lastBar.getLow(), IEngine.OrderCommand.SELL, period, lastBar.getTime(), chart);
                 print(zl.toString());
+                print(String.format("bar [%f][%f] (%s)", bar.getOpen(), bar.getClose(), new DateTime(bar.getTime())));
+                print("");
                 zeroLines.add(zl);
                 zl.render();
             }
@@ -430,6 +452,10 @@ public class NotNLA implements IStrategy {
 
     protected void print(String msg) {
         console.getInfo().println(msg);
+    }
+
+    protected void print(String msg, Object ...args) {
+        console.getInfo().println(String.format(msg, args));
     }
 
     protected void printErr(String err) {
