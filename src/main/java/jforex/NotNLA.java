@@ -2,6 +2,7 @@ package main.java.jforex;
 
 import com.dukascopy.api.*;
 import com.dukascopy.api.drawings.IChartObjectFactory;
+import com.dukascopy.api.drawings.IPriceMarkerChartObject;
 import com.dukascopy.api.drawings.IShortLineChartObject;
 import org.joda.time.DateTime;
 
@@ -9,6 +10,7 @@ import java.awt.*;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Library("/home/heftyy/JForex/Strategies/libs/joda-time-2.3.jar")
 public class NotNLA implements IStrategy {
@@ -61,6 +63,13 @@ public class NotNLA implements IStrategy {
             }
         }
 
+        protected static void updateZLTime(List<ZeroLine> zeroLines) {
+            for (Iterator<ZeroLine> it = zeroLines.iterator(); it.hasNext();) {
+                ZeroLine zl = it.next();
+                zl.endLine(System.currentTimeMillis());
+            }
+        }
+
         private void render() {
             shortLine = factory.createShortLine("zl_"+uuid.toString(),
                     time.getMillis(), price,
@@ -99,21 +108,29 @@ public class NotNLA implements IStrategy {
     @Configurable("TP max [pips]")
     public int takeProfitMaxPips = 30;
     @Configurable("TP min [pips]")
-    public int takeProfitMinPips = 10;
+    public int takeProfitMinPips = 0;
     @Configurable("SL [pips]")
-    public int stopLossPips = 20;
+    public int stopLossPips = 30;
     @Configurable("Min bar size[pips]")
     public int minBarSize = 1;
 //    @Configurable("Min difference for sequence bars [pips]")
     public int minDifferenceForSequence = 5;
     @Configurable("Attempt close after profit[pips]")
     public int attemptCloseAfterProfit = 30;
+    @Configurable("Trailing step[pips]")
+    public int trailingStep = 1;
+    @Configurable("Trailing stop[pips]")
+    public int trailingStop = 10;
+    @Configurable("Draw SL levels on chart")
+    public boolean drawSl = true;
     @Configurable("")
     public Set<Period> periods = new HashSet<Period>(
         Arrays.asList(new Period[]{Period.DAILY})
     );
 
     private static Color DARK_GREEN = Color.getHSBColor(102f / 360, 1f, 0.4f);
+
+    private Map<IOrder, Double> slPrices = new ConcurrentHashMap<IOrder, Double>();
 
     private int precision = 5;
     private Instrument instrument = Instrument.EURUSD;
@@ -155,7 +172,9 @@ public class NotNLA implements IStrategy {
         console.getOut().println("Stopped");
     }
 
-    public void onTick(Instrument instrument, ITick tick) throws JFException { }
+    public void onTick(Instrument instrument, ITick tick) throws JFException {
+        trailingStop(tick);
+    }
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
 
@@ -252,6 +271,63 @@ public class NotNLA implements IStrategy {
         }
     }
 
+    private void trailingStop(ITick tick) throws JFException {
+        //add trailing stops
+        for (IOrder order : engine.getOrders(instrument)) {
+            if (!(order.getState() == IOrder.State.FILLED && Double.compare(order.getRequestedAmount(), order.getAmount()) == 0) // instrument's position
+                    || (slPrices.get(order) == null)) {
+                continue;
+            }
+            double prevSl = slPrices.get(order) == null ? 0 : slPrices.get(order);
+            double marketPrice = order.isLong() ? tick.getBid() : tick.getAsk();
+            int sign = order.isLong() ? +1 : -1;
+            double slInPips = Math.abs(marketPrice - prevSl) / instrument.getPipValue();
+            if (slInPips > trailingStop + trailingStep) {
+                double newSl = marketPrice - (sign * trailingStop * instrument.getPipValue());
+                slPrices.put(order, newSl);
+                print("%s of %s moved SL %.5f -> %.5f", order.getLabel(), order.getInstrument(), prevSl, newSl);
+                if(drawSl){
+                    for(IChart chart : context.getCharts(instrument)){
+                        IPriceMarkerChartObject line = chart.getChartObjectFactory().createPriceMarker(order.getId(), newSl);
+                        line.setText("SL for " + order.getId());
+                        line.setColor(Color.GRAY);
+                        line.setLineStyle(LineStyle.FINE_DASHED);
+                        chart.add(line);
+                    }
+                }
+            }
+        }
+
+        //check if SL levels are reached
+        Iterator<Map.Entry<IOrder, Double>> entries = slPrices.entrySet().iterator();
+        while (entries.hasNext()) {
+            Map.Entry<IOrder, Double> entry = entries.next();
+            IOrder order = entry.getKey();
+            double slPrice = entry.getValue();
+            if(order.getInstrument() != instrument){
+                continue;
+            }
+
+            double marketPrice = order.isLong() ? tick.getBid() : tick.getAsk();
+            if ((order.isLong() && slPrice >= marketPrice) || (!order.isLong() && slPrice <= marketPrice)) {
+                print("%s of %s breached SL level of %.5f (last %s=%.5f), creating an oposite direction Market order to close the position",
+                        order.getLabel(),
+                        order.getInstrument(),
+                        slPrice,
+                        order.isLong() ? "BID" : "ASK",
+                        marketPrice
+                );
+                engine.submitOrder("OppDirOrder_"+System.currentTimeMillis(), instrument, order.isLong() ? IEngine.OrderCommand.SELL : IEngine.OrderCommand.BUY, order.getAmount());
+                entries.remove();
+                if(drawSl){
+                    for(IChart chart : context.getCharts(instrument)){
+                        chart.remove(order.getId());
+                    }
+                }
+            }
+        }
+    }
+
     private void checkForClose(IBar lastBar, IBar bar) throws JFException {
         for(IOrder order : engine.getOrders()) {
             if (order.getState() == IOrder.State.FILLED) {
@@ -299,6 +375,7 @@ public class NotNLA implements IStrategy {
     private void manageZeroLines(Period period, IBar bar) throws JFException {
         IBar lastBar = getPreviousBar(period, bar);
         ZeroLine.removeOldLines(zeroLines, bar, period);
+        ZeroLine.updateZLTime(zeroLines);
         double lastBarSize = getBarSizePips(lastBar);
         double currentBarSize = getBarSizePips(bar);
 
