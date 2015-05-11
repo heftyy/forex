@@ -173,7 +173,7 @@ public class NotNLA implements IStrategy {
     }
 
     public void onTick(Instrument instrument, ITick tick) throws JFException {
-        if (stopLossPips > 0) {
+        if (trailingStopTrigger > 0) {
             for(IOrder order : engine.getOrders()) {
                 updateTrailingStopLoss(order, tick, trailingStopTrigger, trailingStep);
             }
