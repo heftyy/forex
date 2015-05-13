@@ -259,7 +259,7 @@ public class NotNLA implements IStrategy {
                         takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
                     else {
                         if(takeProfitMaxPips > 0)
-                            takeProfit = askBar.getClose() + instrument.getPipValue() * takeProfitMaxPips;
+                            takeProfit = askBar.getClose() - instrument.getPipValue() * takeProfitMaxPips;
                     }
 
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
@@ -269,7 +269,7 @@ public class NotNLA implements IStrategy {
                         takeProfit = sellZL.price + instrument.getPipValue() * takeProfitBeforeZLPips;
                     else {
                         if(takeProfitMinPips > 0)
-                            takeProfit = askBar.getClose() + instrument.getPipValue() * takeProfitMinPips;
+                            takeProfit = askBar.getClose() - instrument.getPipValue() * takeProfitMinPips;
                     }
 
                     stopLoss = price + instrument.getPipValue() * stopLossPips;
