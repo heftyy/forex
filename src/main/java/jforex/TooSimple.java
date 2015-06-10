@@ -200,7 +200,7 @@ public class TooSimple implements IStrategy {
                     }
                 }
 
-//                if(!trendMatch) return;
+                if(!trendMatch) return;
 
                 double takeProfit = 0, stopLoss = 0;
                 double price = history.getLastTick(instrument).getAsk();
@@ -228,8 +228,7 @@ public class TooSimple implements IStrategy {
                     }
                 }
 
-//                if(!trendMatch) return;
-
+                if(!trendMatch) return;
 
                 double takeProfit = 0, stopLoss;
                 double price = history.getLastTick(instrument).getAsk();
