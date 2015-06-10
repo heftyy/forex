@@ -29,9 +29,22 @@
  */
 package main.java.robot;
 
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Toolkit;
+import com.dukascopy.api.*;
+import com.dukascopy.api.feed.FeedDescriptor;
+import com.dukascopy.api.feed.IFeedDescriptor;
+import com.dukascopy.api.system.ISystemListener;
+import com.dukascopy.api.system.ITesterClient;
+import com.dukascopy.api.system.TesterFactory;
+import com.dukascopy.api.system.tester.*;
+import main.java.jforex.TooSimple;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
@@ -39,41 +52,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
-
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
-import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
-
-import main.java.jforex.NotNLA;
-import org.joda.time.DateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.dukascopy.api.DataType;
-import com.dukascopy.api.Filter;
-import com.dukascopy.api.IChart;
-import com.dukascopy.api.Instrument;
-import com.dukascopy.api.LoadingProgressListener;
-import com.dukascopy.api.OfferSide;
-import com.dukascopy.api.Period;
-import com.dukascopy.api.PriceRange;
-import com.dukascopy.api.ReversalAmount;
-import com.dukascopy.api.TickBarSize;
-import com.dukascopy.api.feed.FeedDescriptor;
-import com.dukascopy.api.feed.IFeedDescriptor;
-import com.dukascopy.api.system.ISystemListener;
-import com.dukascopy.api.system.ITesterClient;
-import com.dukascopy.api.system.TesterFactory;
-import com.dukascopy.api.system.tester.ITesterChartController;
-import com.dukascopy.api.system.tester.ITesterExecution;
-import com.dukascopy.api.system.tester.ITesterExecutionControl;
-import com.dukascopy.api.system.tester.ITesterGui;
-import com.dukascopy.api.system.tester.ITesterUserInterface;
 
 import static com.dukascopy.api.DataType.*;
 import static com.dukascopy.api.Instrument.*;
@@ -189,8 +167,8 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
         });
 
         DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm");
-        DateTime from = DateTime.parse("2015-05-02 00:00", dtf);
-        DateTime to =   DateTime.parse("2015-05-04 20:00", dtf);
+        DateTime from = DateTime.parse("2015-06-10 00:00", dtf);
+        DateTime to =   DateTime.parse("2015-06-10 11:00", dtf);
 
         client.setDataInterval(Period.TICK, OfferSide.BID,
                 ITesterClient.InterpolationMethod.OPEN_TICK,
@@ -229,7 +207,7 @@ public class GUIModeChartTypes extends JFrame implements ITesterUserInterface, I
         LOGGER.info("Starting strategy");
 
         client.startStrategy(
-                new NotNLA(),
+                new TooSimple(),
                 new LoadingProgressListener() {
                     @Override
                     public void dataLoaded(long startTime, long endTime, long currentTime, String information) {
