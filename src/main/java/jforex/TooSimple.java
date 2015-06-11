@@ -105,6 +105,8 @@ public class TooSimple implements IStrategy {
     public Period majorPeriod = Period.ONE_HOUR;
     @Configurable("Period ZL")
     public Period periodZL = Period.FOUR_HOURS;
+    @Configurable("Max bar size[pips]")
+    public int maxBarSize = 60;
     @Configurable("Min TP distance to ZL[pips]")
     public int minTPdistanceToZL = 30;
     @Configurable("TP before ZL")
@@ -181,6 +183,11 @@ public class TooSimple implements IStrategy {
         }
 
         if (period == Period.ONE_HOUR && positionsTotal(instrument) == 0)  {
+            //check if the current bar isn't too big so we don't open order after a big price change
+            if(askBar.getHigh() - askBar.getLow() > pip(maxBarSize, instrument)) {
+                return;
+            }
+
             IBar lastBar = context.getHistory().getBar(instrument, Period.ONE_HOUR, OfferSide.ASK, 2);
 
             //get all fifteen minutes bars from the last hour bar
