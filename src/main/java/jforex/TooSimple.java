@@ -184,7 +184,9 @@ public class TooSimple implements IStrategy {
             IBar lastBar = context.getHistory().getBar(instrument, Period.ONE_HOUR, OfferSide.ASK, 2);
 
             //get all fifteen minutes bars from the last hour bar
-            List<IBar> shortBars = context.getHistory().getBars(instrument, Period.FIFTEEN_MINS, OfferSide.ASK, lastBar.getTime(), askBar.getTime());
+            int hourInMillis = 1000 * 60 * 60;
+            List<IBar> shortBars = context.getHistory().getBars(instrument, Period.FIFTEEN_MINS, OfferSide.ASK, lastBar.getTime() + hourInMillis, askBar.getTime() + hourInMillis);
+            shortBars.remove(4);
 
             IEngine.OrderCommand transactionType = getTransactionType(lastBar, shortBars);
 
