@@ -108,27 +108,26 @@ public class TooSimple implements IStrategy {
             Arrays.asList(new Period[]{Period.FOUR_HOURS, Period.DAILY})
     );
     @Configurable("Max bar size[pips]")
-    public int maxBarSize = 60;
+    public int maxBarSize = 100;
     @Configurable("Min TP distance to ZL[pips]")
     public int minTPdistanceToZL = 30;
     @Configurable("TP before ZL")
     public int takeProfitBeforeZLPips = 12;
     @Configurable("TP no zl [pips]")
-    public int takeProfitPips = 30;
+    public int takeProfitPips = 0;
     @Configurable("SL [pips]")
     public int stopLossPips = 30;
     @Configurable("Trailing step[pips]")
-    public int trailingStep = 20;
+    public int trailingStep = 40;
     @Configurable("Trailing stop trigger[pips]")
     public int trailingStopTrigger = 30;
     @Configurable("")
     public Set<Period> periods = new HashSet<>(
-        Arrays.asList(new Period[]{Period.DAILY})
+        Arrays.asList(new Period[]{})
     );
 
     private static Color DARK_GREEN = Color.getHSBColor(102f / 360, 1f, 0.4f);
-
-    private Map<IOrder, Double> slPrices = new ConcurrentHashMap<IOrder, Double>();
+    private static int hourInMillis = 1000 * 60 * 60;
 
     private int precision = 5;
     private Instrument instrument = Instrument.EURUSD;
@@ -188,20 +187,24 @@ public class TooSimple implements IStrategy {
             }
         }
 
-        if (period == Period.ONE_HOUR && positionsTotal(instrument) == 0)  {
+        if(period == minorPeriod && positionsTotal(instrument) > 0) {
+            checkForClose(askBar);
+        }
+
+        if (period == majorPeriod && positionsTotal(instrument) == 0)  {
             //check if the current bar isn't too big so we don't open order after a big price change
             if(askBar.getHigh() - askBar.getLow() > pip(maxBarSize, instrument)) {
                 return;
             }
 
-            IBar lastBar = context.getHistory().getBar(instrument, Period.ONE_HOUR, OfferSide.ASK, 2);
+            IBar lastMajorBar = context.getHistory().getBar(instrument, majorPeriod, OfferSide.ASK, 2);
 
             //get all fifteen minutes bars from the last hour bar
-            int hourInMillis = 1000 * 60 * 60;
-            List<IBar> shortBars = context.getHistory().getBars(instrument, Period.FIFTEEN_MINS, OfferSide.ASK, lastBar.getTime() + hourInMillis, askBar.getTime() + hourInMillis);
+            List<IBar> shortBars = context.getHistory().getBars(instrument, minorPeriod, OfferSide.ASK, lastMajorBar.getTime() + hourInMillis, askBar.getTime() + hourInMillis);
+            //remove the last one because getBars periods are inclusive and it returns one bar too many
             shortBars.remove(4);
 
-            IEngine.OrderCommand transactionType = getTransactionType(lastBar, shortBars);
+            IEngine.OrderCommand transactionType = getTransactionType(lastMajorBar, shortBars);
 
             //LONG
             if(transactionType == IEngine.OrderCommand.BUY) {
@@ -373,6 +376,28 @@ public class TooSimple implements IStrategy {
         return result;
     }
 
+    private void checkForClose(IBar minorBar) throws JFException {
+        for (IOrder order : engine.getOrders(instrument)) {
+            if (order.getState() == IOrder.State.FILLED) {
+                long orderBarTime = history.getBarStart(majorPeriod, order.getFillTime());
+                //if the major bar in which the order was placed is not finished yet skip this check
+                if(orderBarTime + hourInMillis > history.getLastTick(instrument).getTime())
+                    return;
+
+                IBar orderBar = history.getBars(instrument, majorPeriod, OfferSide.ASK, orderBarTime, orderBarTime+hourInMillis).get(0);
+                if(order.isLong()) {
+                    if(minorBar.getClose() < orderBar.getLow()) {
+                        order.close();
+                    }
+                }
+                else {
+                    if(minorBar.getClose() > orderBar.getHigh()) {
+                        order.close();
+                    }
+                }
+            }
+        }
+    }
 
     private IBar getPreviousBar(Period period, IBar bar) throws JFException {
         IBar lastBar = history.getBars(instrument, period, OfferSide.BID, bar.getTime() - period.getInterval(), bar.getTime()).get(0);
