@@ -75,8 +75,8 @@ public class TooSimple implements IStrategy {
                     time.getMillis(), price,
                     System.currentTimeMillis(), price);
             shortLine.setText("ZL "+this.period);
-            if(this.command == IEngine.OrderCommand.BUY) shortLine.setColor(DARK_GREEN);
-            if(this.command == IEngine.OrderCommand.SELL) shortLine.setColor(Color.RED);
+            if(this.command == IEngine.OrderCommand.BUY) shortLine.setColor(Color.RED);
+            if(this.command == IEngine.OrderCommand.SELL) shortLine.setColor(DARK_GREEN);
 //            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
             chart.add(shortLine);
         }
@@ -108,25 +108,25 @@ public class TooSimple implements IStrategy {
             Arrays.asList(new Period[]{Period.FOUR_HOURS, Period.DAILY})
     );
     @Configurable("Max bar size[pips]")
-    public int maxBarSize = 100;
+    public int maxBarSize = 35;
     @Configurable("Min TP distance to ZL[pips]")
-    public int minTPdistanceToZL = 30;
+    public int minTPdistanceToZL = 20;
     @Configurable("TP before ZL")
-    public int takeProfitBeforeZLPips = 12;
+    public int takeProfitBeforeZLPips = 10;
     @Configurable("TP no zl [pips]")
     public int takeProfitPips = 0;
     @Configurable("SL [pips]")
-    public int stopLossPips = 30;
+    public int stopLossPips = 40;
     @Configurable("Trailing step[pips]")
     public int trailingStep = 40;
     @Configurable("Trailing stop trigger[pips]")
-    public int trailingStopTrigger = 30;
+    public int trailingStopTrigger = 25;
     @Configurable("Check for close")
     public boolean checkForClose = true;
     @Configurable("Market open hour")
-    public int marketOpenHour = 7;
+    public int marketOpenHour = 5;
     @Configurable("Market close hour")
-    public int marketCloseHour = 16;
+    public int marketCloseHour = 15;
     @Configurable("")
     public Set<Period> periods = new HashSet<>(
         Arrays.asList(new Period[]{})
@@ -393,12 +393,14 @@ public class TooSimple implements IStrategy {
     private void checkForClose(IBar minorBar) throws JFException {
         for (IOrder order : engine.getOrders(instrument)) {
             if (order.getState() == IOrder.State.FILLED) {
+                /*
                 long orderBarTime = history.getBarStart(majorPeriod, order.getFillTime());
                 //if the major bar in which the order was placed is not finished yet skip this check
                 if(orderBarTime + hourInMillis > history.getLastTick(instrument).getTime())
                     return;
 
                 IBar orderBar = history.getBars(instrument, majorPeriod, OfferSide.ASK, orderBarTime, orderBarTime+hourInMillis).get(0);
+
                 if(order.isLong()) {
                     if(minorBar.getClose() < orderBar.getLow()) {
                         order.close();
@@ -406,6 +408,19 @@ public class TooSimple implements IStrategy {
                 }
                 else {
                     if(minorBar.getClose() > orderBar.getHigh()) {
+                        order.close();
+                    }
+                }
+                */
+                IBar lastMajorBar = context.getHistory().getBar(instrument, majorPeriod, OfferSide.ASK, 2);
+
+                if(order.isLong()) {
+                    if(minorBar.getClose() < lastMajorBar.getLow()) {
+                        order.close();
+                    }
+                }
+                else {
+                    if(minorBar.getClose() > lastMajorBar.getHigh()) {
                         order.close();
                     }
                 }
