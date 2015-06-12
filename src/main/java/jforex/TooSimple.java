@@ -412,7 +412,7 @@ public class TooSimple implements IStrategy {
                     }
                 }
                 */
-                IBar lastMajorBar = context.getHistory().getBar(instrument, majorPeriod, OfferSide.ASK, 2);
+                IBar lastMajorBar = context.getHistory().getBar(instrument, majorPeriod, OfferSide.ASK, 1);
 
                 if(order.isLong()) {
                     if(minorBar.getClose() < lastMajorBar.getLow()) {
