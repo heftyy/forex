@@ -121,6 +121,8 @@ public class TooSimple implements IStrategy {
     public int trailingStep = 40;
     @Configurable("Trailing stop trigger[pips]")
     public int trailingStopTrigger = 30;
+    @Configurable("Check for close")
+    public boolean checkForClose = true;
     @Configurable("")
     public Set<Period> periods = new HashSet<>(
         Arrays.asList(new Period[]{})
@@ -187,7 +189,7 @@ public class TooSimple implements IStrategy {
             }
         }
 
-        if(period == minorPeriod && positionsTotal(instrument) > 0) {
+        if(period == minorPeriod && positionsTotal(instrument) > 0 && checkForClose) {
             checkForClose(askBar);
         }
 
