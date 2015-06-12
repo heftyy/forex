@@ -39,7 +39,7 @@ public class TooSimple implements IStrategy {
 
         private void endLine(long endTime) {
             shortLine.setTime(1, endTime);
-            shortLine.setColor(Color.LIGHT_GRAY);
+//            shortLine.setColor(Color.LIGHT_GRAY);
 //            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
 //            shortLine.setText("");
 //            chart.remove(shortLine);
@@ -74,7 +74,7 @@ public class TooSimple implements IStrategy {
             shortLine = factory.createShortLine("zl_"+uuid.toString(),
                     time.getMillis(), price,
                     System.currentTimeMillis(), price);
-//            shortLine.setText("ZL "+this.command+" "+this.period);
+            shortLine.setText("ZL "+this.period);
             if(this.command == IEngine.OrderCommand.BUY) shortLine.setColor(DARK_GREEN);
             if(this.command == IEngine.OrderCommand.SELL) shortLine.setColor(Color.RED);
 //            if(this.period == Period.FOUR_HOURS) shortLine.setColor(DARK_GREEN);
@@ -104,7 +104,9 @@ public class TooSimple implements IStrategy {
     @Configurable("Major period")
     public Period majorPeriod = Period.ONE_HOUR;
     @Configurable("Period ZL")
-    public Period periodZL = Period.FOUR_HOURS;
+    public Set<Period> periodsZL = new HashSet<>(
+            Arrays.asList(new Period[]{Period.FOUR_HOURS, Period.DAILY})
+    );
     @Configurable("Max bar size[pips]")
     public int maxBarSize = 60;
     @Configurable("Min TP distance to ZL[pips]")
@@ -120,7 +122,7 @@ public class TooSimple implements IStrategy {
     @Configurable("Trailing stop trigger[pips]")
     public int trailingStopTrigger = 30;
     @Configurable("")
-    public Set<Period> periods = new HashSet<Period>(
+    public Set<Period> periods = new HashSet<>(
         Arrays.asList(new Period[]{Period.DAILY})
     );
 
@@ -151,11 +153,13 @@ public class TooSimple implements IStrategy {
         this.chart = context.getChart(Instrument.EURUSD);
         this.zeroLines = new ArrayList<>();
 
-        long prevBarTime = history.getPreviousBarStart(this.periodZL, history.getLastTick(Instrument.EURUSD).getTime());
-        List<IBar> bars = history.getBars(instrument, this.periodZL, OfferSide.BID, history.getTimeForNBarsBack(periodZL, prevBarTime, 300), prevBarTime);
+        for(Period periodZL : periodsZL) {
+            long prevBarTime = history.getPreviousBarStart(periodZL, history.getLastTick(Instrument.EURUSD).getTime());
+            List<IBar> bars = history.getBars(instrument, periodZL, OfferSide.BID, history.getTimeForNBarsBack(periodZL, prevBarTime, 300), prevBarTime);
 
-        for(IBar bar : bars) {
-            manageZeroLines(this.periodZL, bar);
+            for(IBar bar : bars) {
+                manageZeroLines(periodZL, bar);
+            }
         }
 
         subscriptionInstrumentCheck(instrument);
@@ -178,8 +182,10 @@ public class TooSimple implements IStrategy {
 
     public void onBar(Instrument instrument, Period period, IBar askBar, IBar bidBar) throws JFException {
 
-        if(period.equals(periodZL)) {
-            manageZeroLines(periodZL, bidBar);
+        for(Period periodZL : periodsZL) {
+            if(period.equals(periodZL)) {
+                manageZeroLines(periodZL, bidBar);
+            }
         }
 
         if (period == Period.ONE_HOUR && positionsTotal(instrument) == 0)  {
@@ -199,7 +205,7 @@ public class TooSimple implements IStrategy {
 
             //LONG
             if(transactionType == IEngine.OrderCommand.BUY) {
-                ZeroLine buyZL = findClosestZL(bidBar.getClose(), periodZL, IEngine.OrderCommand.BUY);
+                ZeroLine buyZL = findClosestZL(bidBar.getClose(), IEngine.OrderCommand.BUY);
 
                 boolean trendMatch = true;
 
@@ -227,7 +233,7 @@ public class TooSimple implements IStrategy {
 
             //SHORT
             if(transactionType == IEngine.OrderCommand.SELL) {
-                ZeroLine sellZL = findClosestZL(bidBar.getClose(), periodZL, IEngine.OrderCommand.SELL);
+                ZeroLine sellZL = findClosestZL(bidBar.getClose(), IEngine.OrderCommand.SELL);
 
                 boolean trendMatch = true;
 
@@ -348,10 +354,9 @@ public class TooSimple implements IStrategy {
         }
     }
 
-    private ZeroLine findClosestZL(double price, Period period, IEngine.OrderCommand cmd) {
+    private ZeroLine findClosestZL(double price, IEngine.OrderCommand cmd) {
         ZeroLine result = null;
         for(ZeroLine zl : zeroLines) {
-            if(period != zl.period) continue;
             if(cmd == IEngine.OrderCommand.BUY) {
                 double minPrice = price + pip(minTPdistanceToZL + takeProfitBeforeZLPips, instrument);
 
