@@ -123,6 +123,10 @@ public class TooSimple implements IStrategy {
     public int trailingStopTrigger = 30;
     @Configurable("Check for close")
     public boolean checkForClose = true;
+    @Configurable("Market open hour")
+    public int marketOpenHour = 7;
+    @Configurable("Market close hour")
+    public int marketCloseHour = 16;
     @Configurable("")
     public Set<Period> periods = new HashSet<>(
         Arrays.asList(new Period[]{})
@@ -189,11 +193,19 @@ public class TooSimple implements IStrategy {
             }
         }
 
+        //close orders
         if(period == minorPeriod && positionsTotal(instrument) > 0 && checkForClose) {
             checkForClose(askBar);
         }
 
+        //open orders
         if (period == majorPeriod && positionsTotal(instrument) == 0)  {
+            DateTime barTime = new DateTime(askBar.getTime());
+            //only open orders after marketOpenHour and before marketCloseHour
+            if(barTime.getHourOfDay() < marketOpenHour || barTime.getHourOfDay() > marketCloseHour) {
+                return;
+            }
+
             //check if the current bar isn't too big so we don't open order after a big price change
             if(askBar.getHigh() - askBar.getLow() > pip(maxBarSize, instrument)) {
                 return;
